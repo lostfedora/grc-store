@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Menu,
   X,
@@ -12,6 +12,8 @@ import {
   FileText,
   DollarSign,
   Settings,
+  LogOut,
+  User,
 } from "lucide-react";
 
 const navItems = [
@@ -22,10 +24,62 @@ const navItems = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
 
   const toggleDrawer = () => setOpen((prev) => !prev);
   const closeDrawer = () => setOpen(false);
+
+  // Mock user data - replace with your actual auth context/user data
+  const user = {
+    name: "Admin User",
+    email: "admin@greatpearlcoffee.com",
+    role: "Administrator",
+  };
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    
+    try {
+      // Add your actual logout logic here
+      // For example:
+      
+      // If using NextAuth.js:
+      // await signOut({ redirect: false });
+      
+      // If using Supabase Auth:
+      // const { error } = await supabase.auth.signOut();
+      // if (error) throw error;
+      
+      // If using custom token-based auth:
+      // localStorage.removeItem('token');
+      // sessionStorage.removeItem('user');
+      
+      // Clear any auth tokens/storage
+      localStorage.removeItem('auth-token');
+      sessionStorage.removeItem('user-session');
+      
+      // Add a small delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Redirect to login page
+      router.push('/login');
+      
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // Fallback redirect even if there's an error
+      router.push('/login');
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const confirmLogout = () => {
+    if (window.confirm('Are you sure you want to log out?')) {
+      handleLogout();
+    }
+  };
 
   return (
     <div className="relative min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 flex">
@@ -46,6 +100,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           transform transition-transform duration-200
           md:translate-x-0
           z-[80]
+          flex flex-col
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
         `}
       >
@@ -69,8 +124,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Nav */}
-        <nav className="px-3 py-3 space-y-1">
+        {/* User Info Section */}
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-900 rounded-full flex items-center justify-center">
+              <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-50 truncate">
+                {user.name}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                {user.role}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-3 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
@@ -103,10 +175,41 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="mt-auto px-4 py-4 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
-          <p className="font-medium">Yeda Group System</p>
-          <p className="mt-0.5">v1.0 • Supabase & Next.js</p>
+        {/* Footer with Logout */}
+        <div className="mt-auto border-t border-slate-200 dark:border-slate-800">
+          {/* Settings Link (optional) */}
+          <Link
+            href="/settings"
+            onClick={closeDrawer}
+            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-200 dark:border-slate-800"
+          >
+            <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            <span>Settings</span>
+          </Link>
+
+          {/* Logout Button */}
+          <button
+            onClick={confirmLogout}
+            disabled={isLoggingOut}
+            className={`
+              flex items-center gap-3 w-full px-4 py-3 text-sm font-medium
+              transition-colors
+              ${
+                isLoggingOut
+                  ? "text-slate-400 cursor-not-allowed"
+                  : "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+              }
+            `}
+          >
+            <LogOut className={`w-4 h-4 ${isLoggingOut ? "animate-pulse" : ""}`} />
+            <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+          </button>
+
+          {/* System Info */}
+          <div className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+            <p className="font-medium">Yeda Group System</p>
+            <p className="mt-0.5">v1.0 • Supabase & Next.js</p>
+          </div>
         </div>
       </aside>
 
