@@ -213,10 +213,10 @@ export default function NewCoffeeRecordPage() {
 
   if (!user) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      <main className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto mb-4" />
-          <p className="text-sm text-slate-600 dark:text-slate-300">
+          <Loader2 className="w-8 h-8 text-green-600 animate-spin mx-auto mb-4" />
+          <p className="text-sm text-gray-600 dark:text-gray-400">
             Checking session...
           </p>
         </div>
@@ -229,20 +229,20 @@ export default function NewCoffeeRecordPage() {
   /* ------------------------------------------------------------------ */
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+    <main className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors">
       {/* Header */}
-      <header className="bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-4 py-4 backdrop-blur">
+      <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-4 transition-colors">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded-lg p-2 border border-emerald-200 dark:border-emerald-700/60">
-                <Coffee className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+              <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 border border-green-200 dark:border-green-800 transition-colors">
+                <Coffee className="w-6 h-6 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
                   New Coffee Record
                 </h1>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   Capture a new coffee delivery to the store
                 </p>
               </div>
@@ -250,7 +250,7 @@ export default function NewCoffeeRecordPage() {
 
             <Link
               href="/coffee-records"
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200/70 dark:border-slate-700/70"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors border border-gray-200 dark:border-slate-600"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Coffee Records</span>
@@ -262,26 +262,26 @@ export default function NewCoffeeRecordPage() {
       {/* Form */}
       <section className="px-4 py-8">
         <div className="max-w-2xl mx-auto">
-          <div className="bg-white/90 dark:bg-slate-900/90 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm transition-colors">
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {/* Supplier (autocomplete) */}
               <div>
                 <label
-                  className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
                   htmlFor="supplier"
                 >
                   Supplier *
                 </label>
                 {loadingSuppliers ? (
-                  <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
+                  <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Loading suppliers...
                   </div>
                 ) : suppliers.length === 0 ? (
-                  <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-700 rounded-lg p-4">
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 transition-colors">
                     <div className="flex items-center">
                       <svg
-                        className="w-5 h-5 text-rose-500 dark:text-rose-300 mr-3"
+                        className="w-5 h-5 text-red-500 dark:text-red-400 mr-3"
                         fill="currentColor"
                         viewBox="0 0 20 20"
                       >
@@ -292,15 +292,15 @@ export default function NewCoffeeRecordPage() {
                         />
                       </svg>
                       <div>
-                        <p className="text-sm font-semibold text-rose-800 dark:text-rose-100">
+                        <p className="text-sm font-semibold text-red-800 dark:text-red-200">
                           No suppliers found
                         </p>
-                        <p className="text-xs text-rose-700 dark:text-rose-200 mt-1">
+                        <p className="text-xs text-red-700 dark:text-red-300 mt-1">
                           Please create a supplier first before adding coffee records.
                         </p>
                         <Link
                           href="/suppliers/new"
-                          className="inline-flex items-center gap-2 bg-emerald-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-colors mt-3 text-xs"
+                          className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg font-medium transition-colors mt-3 text-xs"
                         >
                           <Users className="w-4 h-4" />
                           Create Supplier
@@ -322,23 +322,23 @@ export default function NewCoffeeRecordPage() {
                       }}
                       onFocus={() => setShowSupplierList(true)}
                       placeholder="Start typing supplier name, code, or origin..."
-                      className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                      className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 transition-colors"
                     />
 
                     {showSupplierList && filteredSuppliers.length > 0 && (
-                      <div className="absolute mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                      <div className="absolute mt-1 w-full bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto transition-colors">
                         {filteredSuppliers.map((s) => (
                           <button
                             key={s.id}
                             type="button"
                             onClick={() => handleSupplierSelect(s)}
-                            className="w-full text-left px-3 py-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                            className="w-full text-left px-3 py-2 hover:bg-green-50 dark:hover:bg-green-900/30 transition-colors border-b border-gray-100 dark:border-slate-600 last:border-b-0"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">
                                 {s.name} ({s.code})
                               </span>
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400">
                                 {s.origin}
                               </span>
                             </div>
@@ -351,13 +351,13 @@ export default function NewCoffeeRecordPage() {
                       suppliers.length > 0 &&
                       supplierQuery &&
                       filteredSuppliers.length === 0 && (
-                        <p className="mt-1 text-[11px] text-rose-500 dark:text-rose-300">
+                        <p className="mt-1 text-[11px] text-red-500 dark:text-red-400">
                           No matching supplier. Check spelling or select from the list.
                         </p>
                       )}
 
                     {selectedSupplierId && (
-                      <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+                      <p className="mt-1 text-[11px] text-green-600 dark:text-green-400">
                         Selected: <span className="font-semibold">{supplierName}</span>
                       </p>
                     )}
@@ -369,7 +369,7 @@ export default function NewCoffeeRecordPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-1">
                   <label
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
                     htmlFor="date"
                   >
                     Date *
@@ -379,17 +379,17 @@ export default function NewCoffeeRecordPage() {
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 transition-colors"
                     required
                   />
-                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
                     Delivery date for this coffee.
                   </p>
                 </div>
 
                 <div className="md:col-span-1">
                   <label
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
                     htmlFor="coffeeType"
                   >
                     Coffee Type *
@@ -399,7 +399,7 @@ export default function NewCoffeeRecordPage() {
                     type="text"
                     value={coffeeType}
                     onChange={(e) => setCoffeeType(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 transition-colors"
                     placeholder="e.g. FAQ Robusta, Kiboko, Cherry"
                     required
                   />
@@ -407,7 +407,7 @@ export default function NewCoffeeRecordPage() {
 
                 <div className="md:col-span-1">
                   <label
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
                     htmlFor="status"
                   >
                     Status *
@@ -416,7 +416,7 @@ export default function NewCoffeeRecordPage() {
                     id="status"
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 transition-colors"
                   >
                     {STATUS_OPTIONS.map((st) => (
                       <option key={st} value={st}>
@@ -431,7 +431,7 @@ export default function NewCoffeeRecordPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
                     htmlFor="kilograms"
                   >
                     Kilograms *
@@ -443,7 +443,7 @@ export default function NewCoffeeRecordPage() {
                     step="0.01"
                     value={kilograms}
                     onChange={(e) => setKilograms(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 transition-colors"
                     placeholder="e.g. 1200"
                     required
                   />
@@ -451,7 +451,7 @@ export default function NewCoffeeRecordPage() {
 
                 <div>
                   <label
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
                     htmlFor="bags"
                   >
                     Bags *
@@ -463,7 +463,7 @@ export default function NewCoffeeRecordPage() {
                     step="1"
                     value={bags}
                     onChange={(e) => setBags(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 transition-colors"
                     placeholder="e.g. 20"
                     required
                   />
@@ -471,8 +471,8 @@ export default function NewCoffeeRecordPage() {
               </div>
 
               {/* Info: Batch auto */}
-              <div className="rounded-lg bg-slate-50 dark:bg-slate-900/70 border border-dashed border-slate-200 dark:border-slate-700 px-3 py-2">
-                <p className="text-xs text-slate-600 dark:text-slate-300">
+              <div className="rounded-lg bg-gray-50 dark:bg-slate-700/50 border border-dashed border-gray-200 dark:border-slate-600 px-3 py-2 transition-colors">
+                <p className="text-xs text-gray-600 dark:text-gray-300">
                   <span className="font-semibold">Note:</span> Batch number is{" "}
                   <span className="font-semibold">
                     configured automatically in the background
@@ -484,16 +484,16 @@ export default function NewCoffeeRecordPage() {
               {/* Message Alert */}
               {message && (
                 <div
-                  className={`p-4 rounded-lg border ${
+                  className={`p-4 rounded-lg border transition-colors ${
                     message.type === "success"
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-100"
-                      : "bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-900/40 dark:border-rose-700 dark:text-rose-100"
+                      ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-200"
+                      : "bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200"
                   }`}
                 >
                   <div className="flex items-center">
                     {message.type === "success" ? (
                       <svg
-                        className="w-5 h-5 text-emerald-500 dark:text-emerald-300 mr-3"
+                        className="w-5 h-5 text-green-500 dark:text-green-400 mr-3"
                         fill="currentColor"
                         viewBox="0 0 20 20"
                       >
@@ -505,7 +505,7 @@ export default function NewCoffeeRecordPage() {
                       </svg>
                     ) : (
                       <svg
-                        className="w-5 h-5 text-rose-500 dark:text-rose-300 mr-3"
+                        className="w-5 h-5 text-red-500 dark:text-red-400 mr-3"
                         fill="currentColor"
                         viewBox="0 0 20 20"
                       >
@@ -522,11 +522,11 @@ export default function NewCoffeeRecordPage() {
               )}
 
               {/* Submit Button */}
-              <div className="flex items-center justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-end pt-4 border-t border-gray-200 dark:border-slate-700 transition-colors">
                 <button
                   type="submit"
                   disabled={submitting || loadingSuppliers || suppliers.length === 0}
-                  className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-50 dark:focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                  className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                 >
                   {submitting ? (
                     <>
@@ -545,10 +545,10 @@ export default function NewCoffeeRecordPage() {
           </div>
 
           {/* Help Text */}
-          <div className="mt-6 bg-sky-50 dark:bg-sky-900/40 rounded-lg border border-sky-200 dark:border-sky-700 p-4">
+          <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-4 transition-colors">
             <div className="flex items-start">
               <svg
-                className="w-5 h-5 text-sky-500 dark:text-sky-300 mt-0.5 mr-3 flex-shrink-0"
+                className="w-5 h-5 text-blue-500 dark:text-blue-400 mt-0.5 mr-3 flex-shrink-0"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -559,7 +559,7 @@ export default function NewCoffeeRecordPage() {
                 />
               </svg>
               <div>
-                <p className="text-sm text-sky-800 dark:text-sky-100">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
                   <span className="font-medium">Required fields</span> are marked with an asterisk (*). Make sure all
                   information is accurate before saving the record.
                 </p>

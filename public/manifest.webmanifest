@@ -1,7 +1,7 @@
 {
   "id": "/",
   "name": "Great Pearl Coffee System",
-  "short_name": "GPCStore",
+  "short_name": "Store App",
   "description": "Coffee sourcing, store and finance workflow for Great Pearl Coffee.",
   "start_url": "/",
   "scope": "/",

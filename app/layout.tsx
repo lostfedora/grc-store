@@ -5,14 +5,21 @@ import "./globals.css";
 import AppShell from "@/components/AppShell";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
+// Configure fonts with error handling and fallbacks
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
+  fallback: ["system-ui", "arial"],
+  adjustFontFallback: true,
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+  variable: "--font-geist-mono", 
   subsets: ["latin"],
+  display: "swap",
+  fallback: ["monospace"],
+  adjustFontFallback: true,
 });
 
 export const metadata: Metadata = {
@@ -53,7 +60,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className="h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50"
+      className="h-full bg-gray-50 text-gray-900 dark:bg-slate-900 dark:text-white"
       suppressHydrationWarning
     >
       <head>
@@ -63,7 +70,8 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full`}
+        suppressHydrationWarning
       >
         <AppShell>{children}</AppShell>
         <ServiceWorkerRegister />

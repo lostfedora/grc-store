@@ -64,12 +64,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Redirect to login page
-      router.push('/login');
+      router.push('/auth');
       
     } catch (error) {
       console.error('Logout failed:', error);
       // Fallback redirect even if there's an error
-      router.push('/login');
+      router.push('/auth');
     } finally {
       setIsLoggingOut(false);
     }

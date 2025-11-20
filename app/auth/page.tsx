@@ -120,6 +120,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={togglePasswordVisibility}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -127,6 +128,23 @@ export default function LoginPage() {
                     <Eye className="h-5 w-5" />
                   )}
                 </button>
+              </div>
+              
+              {/* Password visibility helper text */}
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
+                  {showPassword ? (
+                    <>
+                      <Eye className="w-3 h-3 mr-1" />
+                      Password is visible
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="w-3 h-3 mr-1" />
+                      Click eye icon to show password
+                    </>
+                  )}
+                </span>
               </div>
             </div>
 
