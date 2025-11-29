@@ -19,6 +19,11 @@ import {
   X,
   Edit,
   FileText,
+  Eye,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
 } from "lucide-react";
 
 type Supplier = {
@@ -32,6 +37,8 @@ type Supplier = {
   created_at: string;
   updated_at: string;
 };
+
+const PAGE_SIZE = 15;
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString("en-US", {
@@ -59,15 +66,34 @@ export default function SuppliersListPage() {
   const [loadingList, setLoadingList] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
+    null
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Edit modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCode, setEditCode] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editOrigin, setEditOrigin] = useState("");
+  const [editOpeningBalance, setEditOpeningBalance] = useState("");
+  const [editDateRegistered, setEditDateRegistered] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Initialize theme from localStorage / prefers-color-scheme (no toggle here)
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const stored = localStorage.getItem("theme");
-    const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+    const prefersDark = window.matchMedia?.(
+      "(prefers-color-scheme: dark)"
+    ).matches;
 
     const initial =
       stored === "dark" || stored === "light"
@@ -149,6 +175,105 @@ export default function SuppliersListPage() {
     setSelectedSupplier(null);
   };
 
+  const openEditModal = (supplier: Supplier) => {
+    setEditSupplier(supplier);
+    setEditName(supplier.name);
+    setEditCode(supplier.code);
+    setEditPhone(supplier.phone || "");
+    setEditOrigin(supplier.origin);
+    setEditOpeningBalance(String(supplier.opening_balance));
+    setEditDateRegistered(supplier.date_registered);
+    setEditError(null);
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditSupplier(null);
+    setSavingEdit(false);
+    setEditError(null);
+  };
+
+  const handleOpenEditFromDetails = () => {
+    if (!selectedSupplier) return;
+    openEditModal(selectedSupplier);
+    closeModal();
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editSupplier) return;
+
+    const openingBalance = Number(editOpeningBalance || "0");
+
+    if (!editName.trim()) {
+      setEditError("Supplier name is required.");
+      return;
+    }
+    if (!editCode.trim()) {
+      setEditError("Supplier code is required.");
+      return;
+    }
+    if (!editOrigin.trim()) {
+      setEditError("Origin is required.");
+      return;
+    }
+    if (isNaN(openingBalance) || openingBalance < 0) {
+      setEditError("Opening balance must be a valid number (>= 0).");
+      return;
+    }
+    if (!editDateRegistered) {
+      setEditError("Date registered is required.");
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    try {
+      const { error } = await supabase
+        .from("suppliers")
+        .update({
+          name: editName.trim(),
+          code: editCode.trim(),
+          phone: editPhone.trim() || null,
+          origin: editOrigin.trim(),
+          opening_balance: openingBalance,
+          date_registered: editDateRegistered,
+        })
+        .eq("id", editSupplier.id);
+
+      if (error) {
+        setEditError(error.message);
+        setSavingEdit(false);
+        return;
+      }
+
+      // Update local state
+      setSuppliers((prev) =>
+        prev.map((s) =>
+          s.id === editSupplier.id
+            ? {
+                ...s,
+                name: editName.trim(),
+                code: editCode.trim(),
+                phone: editPhone.trim() || null,
+                origin: editOrigin.trim(),
+                opening_balance: openingBalance,
+                date_registered: editDateRegistered,
+                updated_at: new Date().toISOString(),
+              }
+            : s
+        )
+      );
+
+      closeEditModal();
+    } catch (err: any) {
+      setEditError(err.message || "Failed to update supplier.");
+      setSavingEdit(false);
+    }
+  };
+
   const filteredSuppliers = useMemo(() => {
     if (!search.trim()) return suppliers;
 
@@ -161,6 +286,39 @@ export default function SuppliersListPage() {
         s.origin.toLowerCase().includes(term)
     );
   }, [suppliers, search]);
+
+  // Reset page when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredSuppliers.length / PAGE_SIZE)
+  );
+
+  const paginatedSuppliers = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredSuppliers.slice(start, start + PAGE_SIZE);
+  }, [filteredSuppliers, currentPage]);
+
+  const totalOpeningBalanceAll = useMemo(
+    () =>
+      suppliers.reduce(
+        (sum, s) => sum + Number(s.opening_balance || 0),
+        0
+      ),
+    [suppliers]
+  );
+
+  const totalOpeningBalanceFiltered = useMemo(
+    () =>
+      filteredSuppliers.reduce(
+        (sum, s) => sum + Number(s.opening_balance || 0),
+        0
+      ),
+    [filteredSuppliers]
+  );
 
   if (loading && !user) {
     return (
@@ -236,9 +394,9 @@ export default function SuppliersListPage() {
       {/* Content */}
       <section className="px-4 py-6">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Search and Stats */}
+          {/* Search + view mode + counts */}
           <div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
               <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -250,16 +408,43 @@ export default function SuppliersListPage() {
                 />
               </div>
 
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Showing{" "}
-                <span className="font-semibold text-gray-900 dark:text-gray-100">
-                  {filteredSuppliers.length}
-                </span>{" "}
-                of{" "}
-                <span className="font-semibold text-gray-900 dark:text-gray-100">
-                  {suppliers.length}
-                </span>{" "}
-                suppliers
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                <div className="flex items-center gap-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg p-1">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`p-2 rounded-md ${
+                      viewMode === "grid"
+                        ? "bg-green-600 text-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className="bg-current rounded-sm" />
+                      ))}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={`p-2 rounded-md ${
+                      viewMode === "list"
+                        ? "bg-green-600 text-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    <div className="w-4 h-4 flex flex-col gap-0.5">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="bg-current rounded-sm h-1" />
+                      ))}
+                    </div>
+                  </button>
+                </div>
+
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900 rounded-lg px-3 py-2">
+                  Showing {paginatedSuppliers.length} of{" "}
+                  {filteredSuppliers.length} filtered (
+                  {suppliers.length} total)
+                </div>
               </div>
             </div>
 
@@ -296,7 +481,69 @@ export default function SuppliersListPage() {
             </div>
           ) : (
             <>
-              {/* Suppliers Grid */}
+              {/* Summary cards on top (using filtered + overall data) */}
+              {!loading && suppliers.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Filtered Suppliers
+                        </p>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                          {filteredSuppliers.length}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Out of {suppliers.length} total
+                        </p>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2">
+                        <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Filtered Opening Balance
+                        </p>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                          {totalOpeningBalanceFiltered.toLocaleString()} UGX
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Only suppliers in current view
+                        </p>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2">
+                        <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Total Opening Balance
+                        </p>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                          {totalOpeningBalanceAll.toLocaleString()} UGX
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Across all suppliers
+                        </p>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2">
+                        <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Suppliers */}
               {filteredSuppliers.length === 0 ? (
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-12 text-center">
                   <Users className="w-16 h-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
@@ -318,9 +565,9 @@ export default function SuppliersListPage() {
                     </Link>
                   )}
                 </div>
-              ) : (
+              ) : viewMode === "grid" ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredSuppliers.map((supplier) => (
+                  {paginatedSuppliers.map((supplier) => (
                     <div
                       key={supplier.id}
                       className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:shadow-lg hover:border-green-200 dark:hover:border-green-500/60 transition-all duration-200 group"
@@ -407,74 +654,158 @@ export default function SuppliersListPage() {
                       </div>
 
                       {/* Actions */}
-                      <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-800">
+                      <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2">
                         <button
                           onClick={() => handleViewDetails(supplier)}
-                          className="w-full bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 py-2.5 px-4 rounded-lg font-medium hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors text-sm"
+                          className="flex-1 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 py-2.5 px-4 rounded-lg font-medium hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors text-sm"
                         >
                           View Details
+                        </button>
+                        <button
+                          onClick={() => openEditModal(supplier)}
+                          className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                          title="Edit supplier"
+                        >
+                          <Edit className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-gray-800">
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Name
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Code
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Phone
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Origin
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Opening Balance
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Date Registered
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedSuppliers.map((supplier) => (
+                          <tr
+                            key={supplier.id}
+                            className="border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors"
+                          >
+                            <td className="py-3 px-4 text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {supplier.name}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm text-gray-800 dark:text-gray-200">
+                              {supplier.code}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm text-gray-700 dark:text-gray-200">
+                              {supplier.phone || (
+                                <span className="text-gray-400">
+                                  Not provided
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm text-gray-700 dark:text-gray-200">
+                              {supplier.origin}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm font-semibold text-green-700 dark:text-green-300">
+                              {Number(
+                                supplier.opening_balance
+                              ).toLocaleString()}{" "}
+                              UGX
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm text-gray-700 dark:text-gray-200">
+                              {supplier.date_registered}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleViewDetails(supplier)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+                                  title="View details"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => openEditModal(supplier)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+                                  title="Edit supplier"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
 
-              {/* Quick Stats */}
-              {!loading && suppliers.length > 0 && (
-                <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Total Suppliers
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                          {suppliers.length}
-                        </p>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2">
-                        <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                    </div>
-                  </div>
+              {/* Pagination */}
+              {filteredSuppliers.length > 0 && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                    Page{" "}
+                    <span className="font-semibold">{currentPage}</span> of{" "}
+                    <span className="font-semibold">{totalPages}</span> • Showing{" "}
+                    {paginatedSuppliers.length} suppliers
+                  </p>
 
-                  <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Total Balance
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                          {suppliers
-                            .reduce(
-                              (sum, s) => sum + s.opening_balance,
-                              0
-                            )
-                            .toLocaleString()}{" "}
-                          UGX
-                        </p>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2">
-                        <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Search Results
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                          {filteredSuppliers.length}
-                        </p>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2">
-                        <Search className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) => Math.max(1, p - 1))
+                      }
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="px-3 py-2 text-xs rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                      {currentPage}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) =>
+                          Math.min(totalPages, p + 1)
+                        )
+                      }
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               )}
@@ -682,11 +1013,158 @@ export default function SuppliersListPage() {
               >
                 Close
               </button>
-              <button className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 active:bg-green-800 transition-colors">
+              <button
+                onClick={handleOpenEditFromDetails}
+                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 active:bg-green-800 transition-colors"
+              >
                 <Edit className="w-4 h-4" />
                 Edit Supplier
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Supplier Modal */}
+      {isEditModalOpen && editSupplier && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-950 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-800 shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                  Edit Supplier
+                </h2>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  Code:{" "}
+                  <span className="font-semibold">{editSupplier.code}</span>
+                </p>
+              </div>
+              <button
+                onClick={closeEditModal}
+                className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Supplier Name
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Supplier name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Supplier Code
+                </label>
+                <input
+                  type="text"
+                  value={editCode}
+                  onChange={(e) => setEditCode(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Supplier code"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Phone Number
+                </label>
+                <input
+                  type="text"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Optional"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Origin / Location
+                </label>
+                <input
+                  type="text"
+                  value={editOrigin}
+                  onChange={(e) => setEditOrigin(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="e.g. Kasese, Mbarara..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                    Opening Balance (UGX)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={editOpeningBalance}
+                    onChange={(e) =>
+                      setEditOpeningBalance(e.target.value)
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="e.g. 0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                    Date Registered
+                  </label>
+                  <input
+                    type="date"
+                    value={editDateRegistered}
+                    onChange={(e) =>
+                      setEditDateRegistered(e.target.value)
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+              </div>
+
+              {editError && (
+                <div className="text-xs p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200">
+                  {editError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingEdit ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="w-4 h-4" />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

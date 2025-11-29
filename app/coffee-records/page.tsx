@@ -21,6 +21,11 @@ import {
   X,
   Edit,
   FileText,
+  Eye,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
 } from "lucide-react";
 
 type CoffeeRecord = {
@@ -51,6 +56,8 @@ const STATUS_OPTIONS = [
   "assessed",
   "rejected",
 ];
+
+const PAGE_SIZE = 15;
 
 const getStatusColor = (status: string) => {
   const colors = {
@@ -110,12 +117,33 @@ export default function CoffeeRecordsListPage() {
   const [loading, setLoading] = useState(true);
   const [loadingList, setLoadingList] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
   const [selectedRecord, setSelectedRecord] = useState<CoffeeRecord | null>(
     null
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Edit modal
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editRecord, setEditRecord] = useState<CoffeeRecord | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editSupplierName, setEditSupplierName] = useState("");
+  const [editCoffeeType, setEditCoffeeType] = useState("");
+  const [editKilograms, setEditKilograms] = useState<string>("");
+  const [editBags, setEditBags] = useState<string>("");
+  const [editStatus, setEditStatus] = useState("");
+  const [editBatchNumber, setEditBatchNumber] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Auth check + initial load
   useEffect(() => {
@@ -187,23 +215,178 @@ export default function CoffeeRecordsListPage() {
     setSelectedRecord(null);
   };
 
+  const openEditModal = (record: CoffeeRecord) => {
+    setEditRecord(record);
+    setEditDate(record.date);
+    setEditSupplierName(record.supplier_name);
+    setEditCoffeeType(record.coffee_type);
+    setEditKilograms(String(record.kilograms));
+    setEditBags(String(record.bags));
+    setEditStatus(record.status);
+    setEditBatchNumber(record.batch_number);
+    setEditError(null);
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditRecord(null);
+    setSavingEdit(false);
+    setEditError(null);
+  };
+
+  const handleOpenEditFromDetails = () => {
+    if (!selectedRecord) return;
+    openEditModal(selectedRecord);
+    closeModal();
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editRecord) return;
+
+    const kgs = Number(editKilograms || "0");
+    const bags = Number(editBags || "0");
+
+    if (!editDate) {
+      setEditError("Date is required.");
+      return;
+    }
+    if (!editSupplierName.trim()) {
+      setEditError("Supplier name is required.");
+      return;
+    }
+    if (!editCoffeeType.trim()) {
+      setEditError("Coffee type is required.");
+      return;
+    }
+    if (isNaN(kgs) || kgs <= 0) {
+      setEditError("Kilograms must be a positive number.");
+      return;
+    }
+    if (isNaN(bags) || bags <= 0) {
+      setEditError("Bags must be a positive number.");
+      return;
+    }
+    if (!editStatus || editStatus === "all") {
+      setEditError("Please choose a valid status.");
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    try {
+      const { error } = await supabase
+        .from("coffee_records")
+        .update({
+          date: editDate,
+          supplier_name: editSupplierName.trim(),
+          coffee_type: editCoffeeType.trim(),
+          kilograms: kgs,
+          bags: bags,
+          status: editStatus,
+          batch_number: editBatchNumber.trim() || editRecord.batch_number,
+        })
+        .eq("id", editRecord.id);
+
+      if (error) {
+        setEditError(error.message);
+        setSavingEdit(false);
+        return;
+      }
+
+      // Update local state
+      setRecords((prev) =>
+        prev.map((r) =>
+          r.id === editRecord.id
+            ? {
+                ...r,
+                date: editDate,
+                supplier_name: editSupplierName.trim(),
+                coffee_type: editCoffeeType.trim(),
+                kilograms: kgs,
+                bags: bags,
+                status: editStatus,
+                batch_number: editBatchNumber.trim() || editRecord.batch_number,
+                updated_at: new Date().toISOString(),
+              }
+            : r
+        )
+      );
+
+      closeEditModal();
+    } catch (err: any) {
+      setEditError(err.message || "Failed to update record.");
+      setSavingEdit(false);
+    }
+  };
+
   const filteredRecords = useMemo(() => {
-    let list = records;
+    let list = [...records];
 
     if (statusFilter !== "all") {
       list = list.filter((r) => r.status === statusFilter);
     }
 
-    if (!search.trim()) return list;
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      list = list.filter((r) => new Date(r.date) >= from);
+    }
 
-    const term = search.toLowerCase();
-    return list.filter(
-      (r) =>
-        r.supplier_name.toLowerCase().includes(term) ||
-        r.batch_number.toLowerCase().includes(term) ||
-        r.coffee_type.toLowerCase().includes(term)
+    if (dateTo) {
+      const to = new Date(dateTo);
+      list = list.filter((r) => new Date(r.date) <= to);
+    }
+
+    if (search.trim()) {
+      const term = search.toLowerCase();
+      list = list.filter(
+        (r) =>
+          r.supplier_name.toLowerCase().includes(term) ||
+          r.batch_number.toLowerCase().includes(term) ||
+          r.coffee_type.toLowerCase().includes(term)
+      );
+    }
+
+    // Descending by date
+    list.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-  }, [records, search, statusFilter]);
+
+    return list;
+  }, [records, search, statusFilter, dateFrom, dateTo]);
+
+  // Reset page on filter/search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, dateFrom, dateTo]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRecords.length / PAGE_SIZE)
+  );
+
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRecords.slice(start, start + PAGE_SIZE);
+  }, [filteredRecords, currentPage]);
+
+  const totalWeight = useMemo(
+    () =>
+      filteredRecords.reduce((sum, r) => sum + Number(r.kilograms || 0), 0),
+    [filteredRecords]
+  );
+
+  const totalBags = useMemo(
+    () => filteredRecords.reduce((sum, r) => sum + Number(r.bags || 0), 0),
+    [filteredRecords]
+  );
+
+  const pendingCount = useMemo(
+    () => filteredRecords.filter((r) => r.status === "pending").length,
+    [filteredRecords]
+  );
 
   if (loading && !user) {
     return (
@@ -277,19 +460,55 @@ export default function CoffeeRecordsListPage() {
         <div className="max-w-7xl mx-auto">
           {/* Search and Filters */}
           <div className="mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by supplier, batch, or coffee type..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-colors"
-                />
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+              <div className="flex flex-col sm:flex-row gap-4 flex-1 max-w-3xl">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by supplier, batch, or coffee type..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-colors"
+                  />
+                </div>
+
+                {/* Date range filter */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2.5 text-xs transition-colors">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="bg-transparent border-none focus:outline-none text-gray-700 dark:text-gray-200"
+                      />
+                      <span className="text-gray-400">to</span>
+                      <input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="bg-transparent border-none focus:outline-none text-gray-700 dark:text-gray-200"
+                      />
+                    </div>
+                    {(dateFrom || dateTo) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDateFrom("");
+                          setDateTo("");
+                        }}
+                        className="ml-1 text-[11px] text-gray-500 hover:text-gray-800 dark:hover:text-gray-100"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4 text-gray-400" />
                   <select
@@ -305,8 +524,40 @@ export default function CoffeeRecordsListPage() {
                   </select>
                 </div>
 
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  {filteredRecords.length} of {records.length} records
+                <div className="flex items-center gap-1 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg p-1">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`p-2 rounded-md ${
+                      viewMode === "grid"
+                        ? "bg-green-600 text-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className="bg-current rounded-sm" />
+                      ))}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={`p-2 rounded-md ${
+                      viewMode === "list"
+                        ? "bg-green-600 text-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    <div className="w-4 h-4 flex flex-col gap-0.5">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="bg-current rounded-sm h-1" />
+                      ))}
+                    </div>
+                  </button>
+                </div>
+
+                <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 bg-white dark:bg-slate-700 rounded-lg px-3 py-2">
+                  Showing {paginatedRecords.length} of {filteredRecords.length}{" "}
+                  filtered ({records.length} total)
                 </div>
               </div>
             </div>
@@ -344,33 +595,111 @@ export default function CoffeeRecordsListPage() {
             </div>
           ) : (
             <>
-              {/* Records Grid */}
+              {/* Summary cards (on top, using filtered data) */}
+              {!loading && filteredRecords.length > 0 && (
+                <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Filtered Records
+                        </p>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                          {filteredRecords.length}
+                        </p>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
+                        <Coffee className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Total Weight (filtered)
+                        </p>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                          {totalWeight.toLocaleString()} kg
+                        </p>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
+                        <Scale className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Total Bags (filtered)
+                        </p>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                          {totalBags.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
+                        <Package className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Pending (filtered)
+                        </p>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                          {pendingCount}
+                        </p>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
+                        <Filter className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Records */}
               {filteredRecords.length === 0 ? (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-12 text-center transition-colors">
                   <Coffee className="w-16 h-16 text-gray-300 dark:text-slate-600 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    {search || statusFilter !== "all"
+                    {search ||
+                    statusFilter !== "all" ||
+                    dateFrom ||
+                    dateTo
                       ? "No records found"
                       : "No coffee records yet"}
                   </h3>
                   <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                    {search || statusFilter !== "all"
-                      ? "Try adjusting your search terms or filters to find what you're looking for."
+                    {search ||
+                    statusFilter !== "all" ||
+                    dateFrom ||
+                    dateTo
+                      ? "Try adjusting your search terms, date range, or filters."
                       : "Get started by capturing your first coffee delivery record."}
                   </p>
-                  {!search && statusFilter === "all" && (
-                    <Link
-                      href="/coffee-records/new"
-                      className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Create First Record
-                    </Link>
-                  )}
+                  {!search &&
+                    statusFilter === "all" &&
+                    !dateFrom &&
+                    !dateTo && (
+                      <Link
+                        href="/coffee-records/new"
+                        className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                      >
+                        <Plus className="w-5 h-5" />
+                        Create First Record
+                      </Link>
+                    )}
                 </div>
-              ) : (
+              ) : viewMode === "grid" ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredRecords.map((record) => (
+                  {paginatedRecords.map((record) => (
                     <div
                       key={record.id}
                       className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 hover:shadow-lg dark:hover:shadow-slate-700/20 transition-all duration-200 hover:border-green-200 dark:hover:border-green-800 transition-colors"
@@ -474,89 +803,163 @@ export default function CoffeeRecordsListPage() {
                       </div>
 
                       {/* Actions */}
-                      <div className="mt-6 pt-4 border-t border-gray-200 dark:border-slate-700 transition-colors">
+                      <div className="mt-6 pt-4 border-t border-gray-200 dark:border-slate-700 flex items-center gap-2">
                         <button
                           onClick={() => handleViewDetails(record)}
-                          className="w-full bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 py-2 px-4 rounded-lg font-medium hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors text-sm"
+                          className="flex-1 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 py-2 px-4 rounded-lg font-medium hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors text-sm"
                         >
                           View Details
+                        </button>
+                        <button
+                          onClick={() => openEditModal(record)}
+                          className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                          title="Edit record"
+                        >
+                          <Edit className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-slate-700">
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Batch
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Date
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Supplier
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Coffee Type
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Kg
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Bags
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Status
+                          </th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedRecords.map((record) => (
+                          <tr
+                            key={record.id}
+                            className="border-b border-gray-100 dark:border-slate-700/40 hover:bg-gray-50 dark:hover:bg-slate-700/40 transition-colors"
+                          >
+                            <td className="py-3 px-4 text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
+                              {record.batch_number}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm text-gray-800 dark:text-gray-100">
+                              {record.date}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm text-gray-700 dark:text-gray-200">
+                              {record.supplier_name}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm text-gray-700 dark:text-gray-200">
+                              {record.coffee_type}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm font-semibold text-green-700 dark:text-green-400">
+                              {Number(record.kilograms).toLocaleString()}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm font-semibold text-green-700 dark:text-green-400">
+                              {record.bags}
+                            </td>
+                            <td className="py-3 px-4 text-xs sm:text-sm">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${getStatusColor(
+                                  record.status
+                                )}`}
+                              >
+                                {formatStatus(record.status)}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleViewDetails(record)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md transition-colors"
+                                  title="View details"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => openEditModal(record)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md transition-colors"
+                                  title="Edit record"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
 
-              {/* Quick Stats */}
-              {!loading && records.length > 0 && (
-                <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Total Records
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {records.length}
-                        </p>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                        <Coffee className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                    </div>
-                  </div>
+              {/* Pagination */}
+              {filteredRecords.length > 0 && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                    Page{" "}
+                    <span className="font-semibold">{currentPage}</span> of{" "}
+                    <span className="font-semibold">{totalPages}</span> • Showing{" "}
+                    {paginatedRecords.length} records
+                  </p>
 
-                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Total Weight
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {records
-                            .reduce((sum, r) => sum + r.kilograms, 0)
-                            .toLocaleString()}{" "}
-                          kg
-                        </p>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                        <Scale className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Total Bags
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {records
-                            .reduce((sum, r) => sum + r.bags, 0)
-                            .toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                        <Package className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Filtered
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {filteredRecords.length}
-                        </p>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                        <Filter className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-slate-700"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) => Math.max(1, p - 1))
+                      }
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-slate-700"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="px-3 py-2 text-xs rounded-lg bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200">
+                      {currentPage}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) =>
+                          Math.min(totalPages, p + 1)
+                        )
+                      }
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-slate-700"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-slate-700"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               )}
@@ -565,9 +968,9 @@ export default function CoffeeRecordsListPage() {
         </div>
       </section>
 
-      {/* Details Modal with blurred background */}
+      {/* Details Modal */}
       {isModalOpen && selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transition-colors shadow-2xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700 transition-colors">
@@ -669,7 +1072,7 @@ export default function CoffeeRecordsListPage() {
                 </div>
               </div>
 
-              {/* Delivery Details */}
+              {/* Delivery Details + System Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -750,11 +1153,176 @@ export default function CoffeeRecordsListPage() {
               >
                 Close
               </button>
-              <button className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+              <button
+                onClick={handleOpenEditFromDetails}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
                 <Edit className="w-4 h-4" />
                 Edit Record
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {isEditModalOpen && editRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                  Edit Coffee Record
+                </h2>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  Batch:{" "}
+                  <span className="font-semibold">
+                    {editRecord.batch_number}
+                  </span>
+                </p>
+              </div>
+              <button
+                onClick={closeEditModal}
+                className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  >
+                    {STATUS_OPTIONS.filter((s) => s !== "all").map((st) => (
+                      <option key={st} value={st}>
+                        {formatStatus(st)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Supplier Name
+                </label>
+                <input
+                  type="text"
+                  value={editSupplierName}
+                  onChange={(e) => setEditSupplierName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Supplier name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Coffee Type
+                </label>
+                <input
+                  type="text"
+                  value={editCoffeeType}
+                  onChange={(e) => setEditCoffeeType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="e.g. Robusta Screen 18"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                    Kilograms
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={editKilograms}
+                    onChange={(e) => setEditKilograms(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="e.g. 1200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                    Bags
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={editBags}
+                    onChange={(e) => setEditBags(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="e.g. 20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Batch Number
+                </label>
+                <input
+                  type="text"
+                  value={editBatchNumber}
+                  onChange={(e) => setEditBatchNumber(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Leave empty to keep same"
+                />
+              </div>
+
+              {editError && (
+                <div className="text-xs p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200">
+                  {editError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingEdit ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="w-4 h-4" />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

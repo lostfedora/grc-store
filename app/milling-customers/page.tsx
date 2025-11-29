@@ -19,6 +19,12 @@ import {
   X,
   FileText,
   User as UserIcon,
+  Edit,
+  Eye,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
 } from "lucide-react";
 
 type MillingCustomer = {
@@ -51,6 +57,8 @@ const formatDateTime = (dateString: string) => {
   });
 };
 
+const PAGE_SIZE = 15;
+
 export default function MillingCustomersPage() {
   const router = useRouter();
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -63,6 +71,23 @@ export default function MillingCustomersPage() {
   const [selectedCustomer, setSelectedCustomer] =
     useState<MillingCustomer | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Edit modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editCustomer, setEditCustomer] = useState<MillingCustomer | null>(
+    null
+  );
+  const [editFullName, setEditFullName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editOpeningBalance, setEditOpeningBalance] = useState("");
+  const [editCurrentBalance, setEditCurrentBalance] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Auth check + initial load
   useEffect(() => {
@@ -155,7 +180,22 @@ export default function MillingCustomersPage() {
     );
   }, [customers, search, statusFilter]);
 
-  const totalOpening = useMemo(
+  // Reset page when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredCustomers.length / PAGE_SIZE)
+  );
+
+  const paginatedCustomers = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredCustomers.slice(start, start + PAGE_SIZE);
+  }, [filteredCustomers, currentPage]);
+
+  const totalOpeningAll = useMemo(
     () =>
       customers.reduce(
         (sum, c) => sum + Number(c.opening_balance || 0),
@@ -164,7 +204,7 @@ export default function MillingCustomersPage() {
     [customers]
   );
 
-  const totalBalance = useMemo(
+  const totalBalanceAll = useMemo(
     () =>
       customers.reduce(
         (sum, c) => sum + Number(c.current_balance || 0),
@@ -172,6 +212,134 @@ export default function MillingCustomersPage() {
       ),
     [customers]
   );
+
+  const totalOpeningFiltered = useMemo(
+    () =>
+      filteredCustomers.reduce(
+        (sum, c) => sum + Number(c.opening_balance || 0),
+        0
+      ),
+    [filteredCustomers]
+  );
+
+  const totalBalanceFiltered = useMemo(
+    () =>
+      filteredCustomers.reduce(
+        (sum, c) => sum + Number(c.current_balance || 0),
+        0
+      ),
+    [filteredCustomers]
+  );
+
+  const openEditModal = (customer: MillingCustomer) => {
+    setEditCustomer(customer);
+    setEditFullName(customer.full_name);
+    setEditPhone(customer.phone || "");
+    setEditAddress(customer.address || "");
+    setEditOpeningBalance(String(customer.opening_balance));
+    setEditCurrentBalance(String(customer.current_balance));
+    setEditStatus(customer.status);
+    setEditError(null);
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditCustomer(null);
+    setSavingEdit(false);
+    setEditError(null);
+  };
+
+  const handleOpenEditFromDetails = () => {
+    if (!selectedCustomer) return;
+    openEditModal(selectedCustomer);
+    closeModal();
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editCustomer) return;
+
+    const openingBalance = Number(editOpeningBalance || "0");
+    const currentBalance = Number(editCurrentBalance || "0");
+
+    if (!editFullName.trim()) {
+      setEditError("Customer name is required.");
+      return;
+    }
+    if (!editStatus.trim()) {
+      setEditError("Status is required.");
+      return;
+    }
+    if (isNaN(openingBalance) || isNaN(currentBalance)) {
+      setEditError("Opening and current balances must be valid numbers.");
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    try {
+      const { error } = await supabase
+        .from("milling_customers")
+        .update({
+          full_name: editFullName.trim(),
+          phone: editPhone.trim() || null,
+          address: editAddress.trim() || null,
+          opening_balance: openingBalance,
+          current_balance: currentBalance,
+          status: editStatus.trim(),
+        })
+        .eq("id", editCustomer.id);
+
+      if (error) {
+        setEditError(error.message);
+        setSavingEdit(false);
+        return;
+      }
+
+      // Update local state
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === editCustomer.id
+            ? {
+                ...c,
+                full_name: editFullName.trim(),
+                phone: editPhone.trim() || null,
+                address: editAddress.trim() || null,
+                opening_balance: openingBalance,
+                current_balance: currentBalance,
+                status: editStatus.trim(),
+                updated_at: new Date().toISOString(),
+              }
+            : c
+        )
+      );
+
+      // If details modal is open for this customer, keep it in sync
+      if (selectedCustomer && selectedCustomer.id === editCustomer.id) {
+        setSelectedCustomer((prev) =>
+          prev
+            ? {
+                ...prev,
+                full_name: editFullName.trim(),
+                phone: editPhone.trim() || null,
+                address: editAddress.trim() || null,
+                opening_balance: openingBalance,
+                current_balance: currentBalance,
+                status: editStatus.trim(),
+                updated_at: new Date().toISOString(),
+              }
+            : prev
+        );
+      }
+
+      closeEditModal();
+    } catch (err: any) {
+      setEditError(err.message || "Failed to update customer.");
+      setSavingEdit(false);
+    }
+  };
 
   if (loading && !user) {
     return (
@@ -243,9 +411,9 @@ export default function MillingCustomersPage() {
       {/* Content */}
       <section className="px-4 py-6">
         <div className="max-w-7xl mx-auto">
-          {/* Search and Filters */}
-          <div className="mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          {/* Search, filters, view toggle */}
+          <div className="mb-6 space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
@@ -257,13 +425,13 @@ export default function MillingCustomersPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4 text-gray-400" />
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-white transition-colors"
+                    className="px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-white transition-colors text-sm"
                   >
                     <option value="all">All Status</option>
                     {statusOptions.map((st) => (
@@ -274,8 +442,42 @@ export default function MillingCustomersPage() {
                   </select>
                 </div>
 
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  {filteredCustomers.length} of {customers.length} customers
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg p-1">
+                    <button
+                      onClick={() => setViewMode("grid")}
+                      className={`p-2 rounded-md ${
+                        viewMode === "grid"
+                          ? "bg-green-600 text-white shadow-sm"
+                          : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                      }`}
+                    >
+                      <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
+                        {[...Array(4)].map((_, i) => (
+                          <div key={i} className="bg-current rounded-sm" />
+                        ))}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setViewMode("list")}
+                      className={`p-2 rounded-md ${
+                        viewMode === "list"
+                          ? "bg-green-600 text-white shadow-sm"
+                          : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                      }`}
+                    >
+                      <div className="w-4 h-4 flex flex-col gap-0.5">
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className="bg-current rounded-sm h-1" />
+                        ))}
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 bg-white dark:bg-slate-800 rounded-lg px-3 py-2">
+                    Showing {paginatedCustomers.length} of{" "}
+                    {filteredCustomers.length} filtered ({customers.length} total)
+                  </div>
                 </div>
               </div>
             </div>
@@ -313,7 +515,88 @@ export default function MillingCustomersPage() {
             </div>
           ) : (
             <>
-              {/* Records Grid */}
+              {/* Summary cards on top */}
+              {!loading && customers.length > 0 && (
+                <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Filtered Customers
+                        </p>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                          {filteredCustomers.length}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Out of {customers.length} total
+                        </p>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
+                        <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Filtered Opening Balances
+                        </p>
+                        <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                          UGX {totalOpeningFiltered.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Only in current view
+                        </p>
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-2 transition-colors">
+                        <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Filtered Current Balances
+                        </p>
+                        <p className="text-2xl font-bold text-red-700 dark:text-red-400">
+                          UGX {totalBalanceFiltered.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Only in current view
+                        </p>
+                      </div>
+                      <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-2 transition-colors">
+                        <FileText className="w-5 h-5 text-red-600 dark:text-red-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          Total Current Balances
+                        </p>
+                        <p className="text-2xl font-bold text-red-700 dark:text-red-400">
+                          UGX {totalBalanceAll.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Across all customers
+                        </p>
+                      </div>
+                      <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-2 transition-colors">
+                        <FileText className="w-5 h-5 text-red-600 dark:text-red-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Records */}
               {filteredCustomers.length === 0 ? (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-12 text-center transition-colors">
                   <Users className="w-16 h-16 text-gray-300 dark:text-slate-600 mx-auto mb-4" />
@@ -337,9 +620,9 @@ export default function MillingCustomersPage() {
                     </Link>
                   )}
                 </div>
-              ) : (
+              ) : viewMode === "grid" ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredCustomers.map((customer) => (
+                  {paginatedCustomers.map((customer) => (
                     <div
                       key={customer.id}
                       className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 hover:shadow-lg dark:hover:shadow-slate-700/20 transition-all duration-200 hover:border-green-200 dark:hover:border-green-800 transition-colors"
@@ -425,84 +708,173 @@ export default function MillingCustomersPage() {
                       </div>
 
                       {/* Actions */}
-                      <div className="mt-6 pt-4 border-t border-gray-200 dark:border-slate-700 transition-colors">
+                      <div className="mt-6 pt-4 border-t border-gray-200 dark:border-slate-700 transition-colors flex items-center gap-2">
                         <button
                           onClick={() => handleViewDetails(customer)}
-                          className="w-full bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 py-2 px-4 rounded-lg font-medium hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors text-sm"
+                          className="flex-1 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 py-2 px-4 rounded-lg font-medium hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors text-sm"
                         >
                           View Details
+                        </button>
+                        <button
+                          onClick={() => openEditModal(customer)}
+                          className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                          title="Edit customer"
+                        >
+                          <Edit className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-slate-700 text-xs">
+                          <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-300">
+                            Name
+                          </th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-300">
+                            Phone
+                          </th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-300">
+                            Address
+                          </th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-300">
+                            Opening Bal.
+                          </th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-300">
+                            Current Bal.
+                          </th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-300">
+                            Status
+                          </th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-300">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedCustomers.map((customer) => (
+                          <tr
+                            key={customer.id}
+                            className="border-b border-gray-100 dark:border-slate-700/60 hover:bg-gray-50 dark:hover:bg-slate-800/70 transition-colors text-xs sm:text-sm"
+                          >
+                            <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">
+                              {customer.full_name}
+                            </td>
+                            <td className="py-3 px-4 text-gray-700 dark:text-gray-200">
+                              {customer.phone || (
+                                <span className="text-gray-400">
+                                  Not provided
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-gray-700 dark:text-gray-200">
+                              {customer.address || (
+                                <span className="text-gray-400">
+                                  Not provided
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-semibold text-blue-700 dark:text-blue-400">
+                              UGX{" "}
+                              {Number(
+                                customer.opening_balance
+                              ).toLocaleString()}
+                            </td>
+                            <td className="py-3 px-4 font-semibold text-red-700 dark:text-red-400">
+                              UGX{" "}
+                              {Number(
+                                customer.current_balance
+                              ).toLocaleString()}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${
+                                  customer.status === "Active"
+                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                    : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                                }`}
+                              >
+                                {customer.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleViewDetails(customer)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md transition-colors"
+                                  title="View details"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => openEditModal(customer)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md transition-colors"
+                                  title="Edit customer"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
 
-              {/* Quick Stats */}
-              {!loading && customers.length > 0 && (
-                <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Total Customers
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {customers.length}
-                        </p>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                        <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                    </div>
-                  </div>
+              {/* Pagination */}
+              {filteredCustomers.length > 0 && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                    Page{" "}
+                    <span className="font-semibold">{currentPage}</span> of{" "}
+                    <span className="font-semibold">{totalPages}</span> • Showing{" "}
+                    {paginatedCustomers.length} customers
+                  </p>
 
-                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Opening Balances
-                        </p>
-                        <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
-                          UGX {totalOpening.toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-2 transition-colors">
-                        <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Current Balances
-                        </p>
-                        <p className="text-2xl font-bold text-red-700 dark:text-red-400">
-                          UGX {totalBalance.toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-2 transition-colors">
-                        <FileText className="w-5 h-5 text-red-600 dark:text-red-400" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Filtered
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {filteredCustomers.length}
-                        </p>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                        <Filter className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-slate-800"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) => Math.max(1, p - 1))
+                      }
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-slate-800"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="px-3 py-2 text-xs rounded-lg bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-200">
+                      {currentPage}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) =>
+                          Math.min(totalPages, p + 1)
+                        )
+                      }
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-slate-800"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 disabled:opacity-40 text-xs hover:bg-gray-100 dark:hover:bg-slate-800"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               )}
@@ -669,15 +1041,160 @@ export default function MillingCustomersPage() {
               >
                 Close
               </button>
-              {/* You can later wire this to /milling-customers/[id]/edit */}
-              {/* <Link
-                href={`/milling-customers/${selectedCustomer.id}/edit`}
+              <button
+                onClick={handleOpenEditFromDetails}
                 className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
               >
                 <Edit className="w-4 h-4" />
                 Edit Customer
-              </Link> */}
+              </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Customer Modal */}
+      {isEditModalOpen && editCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-slate-700 shadow-2xl transition-colors">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                  Edit Milling Customer
+                </h2>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  {editCustomer.full_name}
+                </p>
+              </div>
+              <button
+                onClick={closeEditModal}
+                className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Customer full name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Phone
+                </label>
+                <input
+                  type="text"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Optional"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={editAddress}
+                  onChange={(e) => setEditAddress(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Optional"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                    Opening Balance (UGX)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={editOpeningBalance}
+                    onChange={(e) =>
+                      setEditOpeningBalance(e.target.value)
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                    Current Balance (UGX)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={editCurrentBalance}
+                    onChange={(e) =>
+                      setEditCurrentBalance(e.target.value)
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                  Status
+                </label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                >
+                  <option value="">Select status</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="Blocked">Blocked</option>
+                </select>
+              </div>
+
+              {editError && (
+                <div className="text-xs p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200">
+                  {editError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingEdit ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="w-4 h-4" />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

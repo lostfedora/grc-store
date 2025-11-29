@@ -22,6 +22,10 @@ import {
   FileText,
   Download,
   Eye,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
 } from "lucide-react";
 
 type MillingTransaction = {
@@ -87,6 +91,8 @@ const StatusBadge = ({ type }: { type: string }) => {
   );
 };
 
+const PAGE_SIZE = 15;
+
 export default function MillingTransactionsListPage() {
   const router = useRouter();
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -96,14 +102,23 @@ export default function MillingTransactionsListPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>("all");
+  const [transactionTypeFilter, setTransactionTypeFilter] =
+    useState<string>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
+  // Date range filter
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
   // View details modal
-  const [selectedRecord, setSelectedRecord] = useState<MillingTransaction | null>(null);
+  const [selectedRecord, setSelectedRecord] =
+    useState<MillingTransaction | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // 👉 New: Edit / Record Balance modal
+  // Edit / Record Balance modal
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editRecord, setEditRecord] = useState<MillingTransaction | null>(null);
   const [paymentInput, setPaymentInput] = useState<string>("");
@@ -180,7 +195,7 @@ export default function MillingTransactionsListPage() {
     setSelectedRecord(null);
   };
 
-  // 👉 New: open edit / record balance modal
+  // open edit / record balance modal
   const openEditModal = (record: MillingTransaction) => {
     setEditRecord(record);
     setPaymentInput("");
@@ -196,14 +211,14 @@ export default function MillingTransactionsListPage() {
     setEditError(null);
   };
 
-  // 👉 From details modal, open edit then close details
+  // From details modal, open edit then close details
   const handleOpenEditFromDetails = () => {
     if (!selectedRecord) return;
     openEditModal(selectedRecord);
     closeDetailsModal();
   };
 
-  // 👉 Save additional payment & update balance
+  // Save additional payment & update balance
   const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editRecord) return;
@@ -215,7 +230,8 @@ export default function MillingTransactionsListPage() {
       return;
     }
 
-    const remaining = Number(editRecord.total_amount) - Number(editRecord.amount_paid);
+    const remaining =
+      Number(editRecord.total_amount) - Number(editRecord.amount_paid);
 
     if (payment > remaining) {
       setEditError(
@@ -267,36 +283,91 @@ export default function MillingTransactionsListPage() {
   );
 
   const filteredRecords = useMemo(() => {
-    let list = records;
+    let list = [...records];
 
+    // filter by transaction type
     if (transactionTypeFilter !== "all") {
       list = list.filter((r) => r.transaction_type === transactionTypeFilter);
     }
 
-    if (!search.trim()) return list;
+    // filter by date range
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      list = list.filter((r) => {
+        const d = new Date(r.date);
+        return d >= from;
+      });
+    }
 
-    const term = search.toLowerCase();
-    return list.filter(
-      (r) =>
-        r.customer_name.toLowerCase().includes(term) ||
-        (r.notes || "").toLowerCase().includes(term) ||
-        r.transaction_type.toLowerCase().includes(term)
+    if (dateTo) {
+      const to = new Date(dateTo);
+      list = list.filter((r) => {
+        const d = new Date(r.date);
+        return d <= to;
+      });
+    }
+
+    // filter by search
+    if (search.trim()) {
+      const term = search.toLowerCase();
+      list = list.filter(
+        (r) =>
+          r.customer_name.toLowerCase().includes(term) ||
+          (r.notes || "").toLowerCase().includes(term) ||
+          r.transaction_type.toLowerCase().includes(term)
+      );
+    }
+
+    // sort descending by date (latest first)
+    list.sort(
+      (a, b) =>
+        new Date(b.date).getTime() -
+        new Date(a.date).getTime()
     );
-  }, [records, search, transactionTypeFilter]);
+
+    return list;
+  }, [records, search, transactionTypeFilter, dateFrom, dateTo]);
+
+  // Reset page when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, transactionTypeFilter, dateFrom, dateTo]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRecords.length / PAGE_SIZE)
+  );
+
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRecords.slice(start, start + PAGE_SIZE);
+  }, [filteredRecords, currentPage]);
 
   const totalKgs = useMemo(
-    () => records.reduce((sum, r) => sum + Number(r.kgs_hulled || 0), 0),
-    [records]
+    () =>
+      filteredRecords.reduce(
+        (sum, r) => sum + Number(r.kgs_hulled || 0),
+        0
+      ),
+    [filteredRecords]
   );
 
   const totalAmount = useMemo(
-    () => records.reduce((sum, r) => sum + Number(r.total_amount || 0), 0),
-    [records]
+    () =>
+      filteredRecords.reduce(
+        (sum, r) => sum + Number(r.total_amount || 0),
+        0
+      ),
+    [filteredRecords]
   );
 
   const totalBalance = useMemo(
-    () => records.reduce((sum, r) => sum + Number(r.balance || 0), 0),
-    [records]
+    () =>
+      filteredRecords.reduce(
+        (sum, r) => sum + Number(r.balance || 0),
+        0
+      ),
+    [filteredRecords]
   );
 
   if (loading && !user) {
@@ -390,58 +461,94 @@ export default function MillingTransactionsListPage() {
                   />
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* Date range filter */}
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5">
-                    <Filter className="w-4 h-4 text-slate-400" />
-                    <select
-                      value={transactionTypeFilter}
-                      onChange={(e) => setTransactionTypeFilter(e.target.value)}
-                      className="bg-transparent border-none focus:ring-0 text-slate-700 dark:text-slate-300 text-sm font-medium"
-                    >
-                      <option value="all">All Types</option>
-                      {transactionTypes.map((tt) => (
-                        <option key={tt} value={tt}>
-                          {formatLabel(tt)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-1 bg-white/80 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 p-1">
-                    <button
-                      onClick={() => setViewMode("grid")}
-                      className={`p-2 rounded-lg ${
-                        viewMode === "grid"
-                          ? "bg-green-500 text-white shadow-md shadow-green-500/25"
-                          : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                      }`}
-                    >
-                      <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
-                        {[...Array(4)].map((_, i) => (
-                          <div key={i} className="bg-current rounded-sm" />
-                        ))}
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => setViewMode("list")}
-                      className={`p-2 rounded-lg ${
-                        viewMode === "list"
-                          ? "bg-green-500 text-white shadow-md shadow-green-500/25"
-                          : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                      }`}
-                    >
-                      <div className="w-4 h-4 flex flex-col gap-0.5">
-                        {[...Array(3)].map((_, i) => (
-                          <div key={i} className="bg-current rounded-sm h-1" />
-                        ))}
-                      </div>
-                    </button>
+                    <Calendar className="w-4 h-4 text-slate-400" />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="bg-transparent border-none text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
+                      />
+                      <span className="text-xs text-slate-400">to</span>
+                      <input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="bg-transparent border-none text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
+                      />
+                    </div>
+                    {(dateFrom || dateTo) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDateFrom("");
+                          setDateTo("");
+                        }}
+                        className="ml-1 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                      >
+                        Clear
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div className="text-sm font-medium text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg px-3 py-2">
-                {filteredRecords.length} of {records.length} transactions
+              <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
+                <div className="flex items-center gap-2 bg-white/80 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5">
+                  <Filter className="w-4 h-4 text-slate-400" />
+                  <select
+                    value={transactionTypeFilter}
+                    onChange={(e) => setTransactionTypeFilter(e.target.value)}
+                    className="bg-transparent border-none focus:ring-0 text-slate-700 dark:text-slate-300 text-sm font-medium"
+                  >
+                    <option value="all">All Types</option>
+                    {transactionTypes.map((tt) => (
+                      <option key={tt} value={tt}>
+                        {formatLabel(tt)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1 bg-white/80 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 p-1">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`p-2 rounded-lg ${
+                      viewMode === "grid"
+                        ? "bg-green-500 text-white shadow-md shadow-green-500/25"
+                        : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className="bg-current rounded-sm" />
+                      ))}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={`p-2 rounded-lg ${
+                      viewMode === "list"
+                        ? "bg-green-500 text-white shadow-md shadow-green-500/25"
+                        : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    <div className="w-4 h-4 flex flex-col gap-0.5">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="bg-current rounded-sm h-1" />
+                      ))}
+                    </div>
+                  </button>
+                </div>
+
+                <div className="text-sm font-medium text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg px-3 py-2">
+                  Showing {paginatedRecords.length} of{" "}
+                  {filteredRecords.length} filtered transactions (
+                  {records.length} total)
+                </div>
               </div>
             </div>
 
@@ -476,120 +583,181 @@ export default function MillingTransactionsListPage() {
             </div>
           ) : (
             <>
+              {/* Summary cards ON TOP of lists */}
+              {!loading && filteredRecords.length > 0 && (
+                <div className="mb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {[
+                    {
+                      label: "Filtered Transactions",
+                      value: filteredRecords.length.toLocaleString(),
+                      icon: FileText,
+                    },
+                    {
+                      label: "Total Kgs Hulled",
+                      value: `${totalKgs.toLocaleString()} kg`,
+                      icon: Scale,
+                    },
+                    {
+                      label: "Total Amount",
+                      value: `UGX ${totalAmount.toLocaleString()}`,
+                      icon: BarChart3,
+                    },
+                    {
+                      label: "Outstanding Balance",
+                      value: `UGX ${totalBalance.toLocaleString()}`,
+                      icon: Package,
+                    },
+                  ].map((stat, index) => (
+                    <div
+                      key={index}
+                      className="bg-white/80 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+                            {stat.label}
+                          </p>
+                          <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                            {stat.value}
+                          </p>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-700 rounded-xl p-3">
+                          <stat.icon className="w-6 h-6 text-slate-600 dark:text-slate-200" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty state / Lists */}
               {filteredRecords.length === 0 ? (
                 <div className="bg-white/80 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 p-16 text-center shadow-lg">
                   <div className="w-24 h-24 bg-slate-100 dark:bg-slate-700 rounded-3xl flex items-center justify-center mx-auto mb-6">
                     <Scale className="w-10 h-10 text-slate-400" />
                   </div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">
-                    {search || transactionTypeFilter !== "all"
+                    {search ||
+                    transactionTypeFilter !== "all" ||
+                    dateFrom ||
+                    dateTo
                       ? "No transactions found"
                       : "No milling transactions yet"}
                   </h3>
                   <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-md mx-auto font-medium">
-                    {search || transactionTypeFilter !== "all"
-                      ? "Try adjusting your search terms or filters."
+                    {search ||
+                    transactionTypeFilter !== "all" ||
+                    dateFrom ||
+                    dateTo
+                      ? "Try adjusting your search terms, date range, or filters."
                       : "Get started by recording your first milling transaction."}
                   </p>
-                  {!search && transactionTypeFilter === "all" && (
-                    <Link
-                      href="/milling/new"
-                      className="inline-flex items-center gap-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-8 py-4 rounded-xl font-semibold shadow-lg shadow-green-500/25 hover:shadow-xl hover:shadow-green-500/30 transition-all duration-200 transform hover:-translate-y-0.5"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Create First Transaction
-                    </Link>
-                  )}
+                  {!search &&
+                    transactionTypeFilter === "all" &&
+                    !dateFrom &&
+                    !dateTo && (
+                      <Link
+                        href="/milling/new"
+                        className="inline-flex items-center gap-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-8 py-4 rounded-xl font-semibold shadow-lg shadow-green-500/25 hover:shadow-xl hover:shadow-green-500/30 transition-all duration-200 transform hover:-translate-y-0.5"
+                      >
+                        <Plus className="w-5 h-5" />
+                        Create First Transaction
+                      </Link>
+                    )}
                 </div>
               ) : viewMode === "grid" ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {filteredRecords.map((record) => (
-                    <div
-                      key={record.id}
-                      className="group bg-white/80 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 hover:shadow-2xl hover:-translate-y-1 hover:border-green-200 dark:hover:border-green-800 transition-all"
-                    >
-                      <div className="flex items-start justify-between mb-5">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-slate-900 dark:text-white text-lg truncate mb-2">
-                            {record.customer_name}
-                          </h3>
-                          <StatusBadge type={record.transaction_type} />
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {paginatedRecords.map((record) => (
+                      <div
+                        key={record.id}
+                        className="group bg-white/80 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 hover:shadow-2xl hover:-translate-y-1 hover:border-green-200 dark:hover:border-green-800 transition-all"
+                      >
+                        <div className="flex items-start justify-between mb-5">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-slate-900 dark:text-white text-lg truncate mb-2">
+                              {record.customer_name}
+                            </h3>
+                            <StatusBadge type={record.transaction_type} />
+                          </div>
+                          <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 rounded-xl p-2.5">
+                            <Scale className="w-5 h-5 text-green-600 dark:text-green-400" />
+                          </div>
                         </div>
-                        <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 rounded-xl p-2.5">
-                          <Scale className="w-5 h-5 text-green-600 dark:text-green-400" />
+
+                        <div className="space-y-4 mb-6">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-500 dark:text-slate-400 font-medium">
+                              Date
+                            </span>
+                            <span className="font-semibold text-slate-900 dark:text-white">
+                              {formatDate(record.date)}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3">
+                              <Scale className="w-4 h-4 text-green-600 dark:text-green-400 mx-auto mb-2" />
+                              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                Kgs Hulled
+                              </p>
+                              <p className="text-lg font-bold text-green-700 dark:text-green-400">
+                                {Number(record.kgs_hulled).toLocaleString()} kg
+                              </p>
+                            </div>
+
+                            <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3">
+                              <BarChart3 className="w-4 h-4 text-blue-600 dark:text-blue-400 mx-auto mb-2" />
+                              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                Total Amount
+                              </p>
+                              <p className="text-lg font-bold text-blue-700 dark:text-blue-400">
+                                UGX{" "}
+                                {Number(record.total_amount).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
+                                Amount Paid
+                              </p>
+                              <p className="font-bold text-emerald-700 dark:text-emerald-400">
+                                UGX{" "}
+                                {Number(record.amount_paid).toLocaleString()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
+                                Balance
+                              </p>
+                              <p className="font-bold text-rose-700 dark:text-rose-400">
+                                UGX {Number(record.balance).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+                          <button
+                            onClick={() => handleViewDetails(record)}
+                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-2.5 px-4 rounded-xl font-semibold text-sm shadow-lg shadow-green-500/25 hover:shadow-xl hover:shadow-green-500/30 transition-all"
+                          >
+                            View Details
+                          </button>
+                          <button
+                            onClick={() => openEditModal(record)}
+                            className="p-2.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
+                            title="Record milling balance"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-
-                      <div className="space-y-4 mb-6">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-slate-500 dark:text-slate-400 font-medium">
-                            Date
-                          </span>
-                          <span className="font-semibold text-slate-900 dark:text-white">
-                            {formatDate(record.date)}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3">
-                            <Scale className="w-4 h-4 text-green-600 dark:text-green-400 mx-auto mb-2" />
-                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                              Kgs Hulled
-                            </p>
-                            <p className="text-lg font-bold text-green-700 dark:text-green-400">
-                              {Number(record.kgs_hulled).toLocaleString()} kg
-                            </p>
-                          </div>
-
-                          <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3">
-                            <BarChart3 className="w-4 h-4 text-blue-600 dark:text-blue-400 mx-auto mb-2" />
-                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                              Total Amount
-                            </p>
-                            <p className="text-lg font-bold text-blue-700 dark:text-blue-400">
-                              UGX {Number(record.total_amount).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div>
-                            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
-                              Amount Paid
-                            </p>
-                            <p className="font-bold text-emerald-700 dark:text-emerald-400">
-                              UGX {Number(record.amount_paid).toLocaleString()}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
-                              Balance
-                            </p>
-                            <p className="font-bold text-rose-700 dark:text-rose-400">
-                              UGX {Number(record.balance).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <button
-                          onClick={() => handleViewDetails(record)}
-                          className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-2.5 px-4 rounded-xl font-semibold text-sm shadow-lg shadow-green-500/25 hover:shadow-xl hover:shadow-green-500/30 transition-all"
-                        >
-                          View Details
-                        </button>
-                        <button
-                          onClick={() => openEditModal(record)}
-                          className="p-2.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
-                          title="Record milling balance"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <div className="bg-white/80 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden">
                   <div className="overflow-x-auto">
@@ -620,7 +788,7 @@ export default function MillingTransactionsListPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredRecords.map((record) => (
+                        {paginatedRecords.map((record) => (
                           <tr
                             key={record.id}
                             className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors"
@@ -676,50 +844,55 @@ export default function MillingTransactionsListPage() {
                 </div>
               )}
 
-              {/* Quick stats */}
-              {!loading && records.length > 0 && (
-                <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {[
-                    {
-                      label: "Total Transactions",
-                      value: records.length.toLocaleString(),
-                      icon: FileText,
-                    },
-                    {
-                      label: "Total Kgs Hulled",
-                      value: `${totalKgs.toLocaleString()} kg`,
-                      icon: Scale,
-                    },
-                    {
-                      label: "Total Amount",
-                      value: `UGX ${totalAmount.toLocaleString()}`,
-                      icon: BarChart3,
-                    },
-                    {
-                      label: "Outstanding Balance",
-                      value: `UGX ${totalBalance.toLocaleString()}`,
-                      icon: Package,
-                    },
-                  ].map((stat, index) => (
-                    <div
-                      key={index}
-                      className="bg-white/80 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
+              {/* Pagination controls */}
+              {filteredRecords.length > 0 && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                    Page{" "}
+                    <span className="font-semibold">{currentPage}</span> of{" "}
+                    <span className="font-semibold">{totalPages}</span> • Showing{" "}
+                    {paginatedRecords.length} records
+                  </p>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 disabled:opacity-40 text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            {stat.label}
-                          </p>
-                          <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                            {stat.value}
-                          </p>
-                        </div>
-                        <div className="bg-slate-50 dark:bg-slate-700 rounded-xl p-3">
-                          <stat.icon className="w-6 h-6 text-slate-600 dark:text-slate-200" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      <ChevronsLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) => Math.max(1, p - 1))
+                      }
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 disabled:opacity-40 text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="px-3 py-2 text-xs rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                      {currentPage}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) =>
+                          Math.min(totalPages, p + 1)
+                        )
+                      }
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 disabled:opacity-40 text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 disabled:opacity-40 text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               )}
             </>
@@ -727,7 +900,7 @@ export default function MillingTransactionsListPage() {
         </div>
       </section>
 
-      {/* Details Modal (unchanged except footer button) */}
+      {/* Details Modal */}
       {isModalOpen && selectedRecord && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-40">
           <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -829,7 +1002,8 @@ export default function MillingTransactionsListPage() {
                           Rate per Kg
                         </p>
                         <p className="text-xl font-bold text-blue-700 dark:text-blue-400">
-                          UGX {Number(selectedRecord.rate_per_kg).toLocaleString()}
+                          UGX{" "}
+                          {Number(selectedRecord.rate_per_kg).toLocaleString()}
                         </p>
                       </div>
                       <BarChart3 className="w-8 h-8 text-blue-600 dark:text-blue-400" />
@@ -880,7 +1054,8 @@ export default function MillingTransactionsListPage() {
                   </h3>
                   <div className="bg-white dark:bg-slate-800 rounded-xl p-4 min-h-[120px]">
                     <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
-                      {selectedRecord.notes || "No notes recorded for this transaction."}
+                      {selectedRecord.notes ||
+                        "No notes recorded for this transaction."}
                     </p>
                   </div>
                 </div>
@@ -943,7 +1118,7 @@ export default function MillingTransactionsListPage() {
         </div>
       )}
 
-      {/* 👉 New: Edit / Record Balance Modal */}
+      {/* Edit / Record Balance Modal */}
       {isEditModalOpen && editRecord && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-lg w-full shadow-2xl">
@@ -954,7 +1129,9 @@ export default function MillingTransactionsListPage() {
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   Customer:{" "}
-                  <span className="font-semibold">{editRecord.customer_name}</span>
+                  <span className="font-semibold">
+                    {editRecord.customer_name}
+                  </span>
                 </p>
               </div>
               <button
@@ -974,25 +1151,33 @@ export default function MillingTransactionsListPage() {
                   </p>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-700/60 rounded-lg p-3">
-                  <p className="text-slate-500 dark:text-slate-400">Kgs Hulled</p>
+                  <p className="text-slate-500 dark:text-slate-400">
+                    Kgs Hulled
+                  </p>
                   <p className="font-semibold text-slate-900 dark:text-white">
                     {Number(editRecord.kgs_hulled).toLocaleString()} kg
                   </p>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-700/60 rounded-lg p-3">
-                  <p className="text-slate-500 dark:text-slate-400">Total Amount</p>
+                  <p className="text-slate-500 dark:text-slate-400">
+                    Total Amount
+                  </p>
                   <p className="font-semibold text-slate-900 dark:text-white">
                     UGX {Number(editRecord.total_amount).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-700/60 rounded-lg p-3">
-                  <p className="text-slate-500 dark:text-slate-400">Already Paid</p>
+                  <p className="text-slate-500 dark:text-slate-400">
+                    Already Paid
+                  </p>
                   <p className="font-semibold text-emerald-700 dark:text-emerald-300">
                     UGX {Number(editRecord.amount_paid).toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-700/60 rounded-lg p-3 col-span-2">
-                  <p className="text-slate-500 dark:text-slate-400">Current Balance</p>
+                  <p className="text-slate-500 dark:text-slate-400">
+                    Current Balance
+                  </p>
                   <p className="font-semibold text-rose-700 dark:text-rose-300">
                     UGX {Number(editRecord.balance).toLocaleString()}
                   </p>
@@ -1017,9 +1202,10 @@ export default function MillingTransactionsListPage() {
                   placeholder="e.g. 15000"
                 />
                 <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  This is an <span className="font-semibold">additional payment</span>{" "}
-                  for this transaction. System will add it to the existing paid amount
-                  and reduce the balance.
+                  This is an{" "}
+                  <span className="font-semibold">additional payment</span> for this
+                  transaction. System will add it to the existing paid amount and
+                  reduce the balance.
                 </p>
               </div>
 
