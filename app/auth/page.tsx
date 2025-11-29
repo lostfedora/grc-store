@@ -2,8 +2,17 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import supabase from "@/lib/supabaseClient";
-import { Eye, EyeOff, Mail, Lock, Shield, Coffee, AlertCircle, CheckCircle2 } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  Shield,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,7 +20,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [message, setMessage] = useState<{
+    text: string;
+    type: "success" | "error";
+  } | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -20,7 +32,10 @@ export default function LoginPage() {
 
     try {
       if (!email || !password) {
-        setMessage({ text: "Please enter both email and password.", type: "error" });
+        setMessage({
+          text: "Please enter both email and password.",
+          type: "error",
+        });
         setLoading(false);
         return;
       }
@@ -33,7 +48,10 @@ export default function LoginPage() {
       if (error) {
         setMessage({ text: `Sign in failed: ${error.message}`, type: "error" });
       } else {
-        setMessage({ text: "Signed in successfully! Redirecting...", type: "success" });
+        setMessage({
+          text: "Signed in successfully! Redirecting...",
+          type: "success",
+        });
         setTimeout(() => router.push("/"), 1500);
       }
     } catch (err: any) {
@@ -44,7 +62,7 @@ export default function LoginPage() {
   };
 
   const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
+    setShowPassword((prev) => !prev);
   };
 
   return (
@@ -52,14 +70,21 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="mx-auto w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
-            <Coffee className="w-8 h-8 text-white" />
+          <div className="mx-auto w-24 h-24 rounded-3xl flex items-center justify-center mb-4 shadow-xl bg-white/80 dark:bg-slate-800/80 border border-emerald-200/70 dark:border-emerald-700/70 overflow-hidden">
+            <Image
+              src="/logo.png"
+              alt="Lite Manager / Great Pearl Coffee"
+              width={96}
+              height={96}
+              className="object-contain"
+              priority
+            />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
             Welcome Back
           </h1>
-          <p className="text-gray-600 dark:text-gray-300">
-            Sign in to your Great Pearl Coffee account
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Sign in to your Lite Manager account
           </p>
         </div>
 
@@ -68,7 +93,10 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
+              >
                 Email Address
               </label>
               <div className="relative">
@@ -91,13 +119,21 @@ export default function LoginPage() {
             {/* Password Field */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-200"
+                >
                   Password
                 </label>
                 <button
                   type="button"
                   className="text-sm text-green-600 dark:text-green-400 hover:text-green-500 dark:hover:text-green-300 font-medium transition-colors"
-                  onClick={() => setMessage({ text: "Please contact your administrator to reset your password.", type: "error" })}
+                  onClick={() =>
+                    setMessage({
+                      text: "Please contact your administrator to reset your password.",
+                      type: "error",
+                    })
+                  }
                 >
                   Forgot password?
                 </button>
@@ -129,7 +165,7 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
-              
+
               {/* Password visibility helper text */}
               <div className="flex items-center justify-between mt-2">
                 <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
@@ -141,7 +177,7 @@ export default function LoginPage() {
                   ) : (
                     <>
                       <EyeOff className="w-3 h-3 mr-1" />
-                      Click eye icon to show password
+                      Click the eye to show password
                     </>
                   )}
                 </span>
@@ -156,9 +192,24 @@ export default function LoginPage() {
             >
               {loading ? (
                 <div className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  <svg
+                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
                   </svg>
                   Signing in...
                 </div>
@@ -198,12 +249,21 @@ export default function LoginPage() {
           {/* Admin Notice */}
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors">
             <div className="flex items-start">
-              <svg className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              <svg
+                className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                  clipRule="evenodd"
+                />
               </svg>
               <div className="ml-3">
                 <p className="text-sm text-blue-700 dark:text-blue-300">
-                  <span className="font-medium">Need an account?</span> Please contact your administrator to create your user account.
+                  <span className="font-medium">Need an account?</span> Please
+                  contact your administrator to create your user account.
                 </p>
               </div>
             </div>
@@ -213,11 +273,17 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="text-center mt-8">
           <div className="flex items-center justify-center mb-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center mr-2">
-              <Shield className="w-3 h-3 text-white" />
+            <div className="w-6 h-6 rounded-md overflow-hidden bg-white/80 dark:bg-slate-800/80 border border-emerald-300/70 dark:border-emerald-700/70 flex items-center justify-center mr-2">
+              <Image
+                src="/logo.png"
+                alt="Lite Manager Logo"
+                width={20}
+                height={20}
+                className="object-contain"
+              />
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-              Great Pearl Coffee System
+              Lite Manager · Great Pearl Coffee
             </p>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-500">

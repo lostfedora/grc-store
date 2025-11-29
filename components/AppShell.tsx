@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Menu,
@@ -9,13 +10,11 @@ import {
   Home,
   Users,
   Coffee,
-  FileText,
-  DollarSign,
+  Scale,
   Settings,
   LogOut,
   User,
-  Scale,
-  UserCheck, // 👈 added for Milling Customers
+  UserCheck,
 } from "lucide-react";
 
 const navItems = [
@@ -23,7 +22,7 @@ const navItems = [
   { label: "Suppliers", href: "/suppliers", icon: Users },
   { label: "Coffee Records", href: "/coffee-records", icon: Coffee },
   { label: "Milling", href: "/milling", icon: Scale },
-  { label: "Milling Customers", href: "/milling-customers", icon: UserCheck }, // 👈 new nav item
+  { label: "Milling Customers", href: "/milling-customers", icon: UserCheck },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -47,7 +46,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     try {
       // Add your actual logout logic here
-
       localStorage.removeItem("auth-token");
       sessionStorage.removeItem("user-session");
 
@@ -93,13 +91,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         {/* Brand / logo */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200 dark:border-slate-800">
-          <div>
-            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
-              Great Pearl Coffee
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Management Console
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-emerald-300/70 dark:border-emerald-700/70 flex items-center justify-center">
+              <Image
+                src="/logo.png"
+                alt="Lite Manager Logo"
+                width={32}
+                height={32}
+                className="object-contain"
+                priority
+              />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                Lite Manager
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Coffee & Milling Console
+              </p>
+            </div>
           </div>
 
           <button
@@ -195,9 +205,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
 
           {/* System Info */}
-          <div className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
-            <p className="font-medium">Yeda Group System</p>
-            <p className="mt-0.5">v1.0 • Supabase & Next.js</p>
+          <div className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <div>
+              <p className="font-medium">Yeda Group System</p>
+              <p className="mt-0.5">Lite Manager · v1.0</p>
+            </div>
+            <div className="w-7 h-7 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-emerald-300/70 dark:border-emerald-700/70 flex items-center justify-center">
+              <Image
+                src="/logo.png"
+                alt="Lite Manager"
+                width={20}
+                height={20}
+                className="object-contain"
+              />
+            </div>
           </div>
         </div>
       </aside>
@@ -214,13 +235,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="text-right">
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                Great Pearl Coffee
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Management Console
-              </p>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-emerald-300/70 dark:border-emerald-700/70 flex items-center justify-center">
+                <Image
+                  src="/logo.png"
+                  alt="Lite Manager"
+                  width={24}
+                  height={24}
+                  className="object-contain"
+                />
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                  Lite Manager
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Coffee & Milling Console
+                </p>
+              </div>
             </div>
           </div>
         </header>
