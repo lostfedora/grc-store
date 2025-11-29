@@ -8,24 +8,11 @@ import { ArrowLeft, Coffee, Save, Loader2, Users } from "lucide-react";
 import Link from "next/link";
 
 type SupplierOption = {
-  id: string;   // uuid, FK -> suppliers.id
+  id: string; // uuid, FK -> suppliers.id
   name: string;
   code: string;
   origin: string;
 };
-
-const STATUS_OPTIONS = [
-  "pending",
-  "quality_review",
-  "pricing",
-  "batched",
-  "drying",
-  "sales",
-  "inventory",
-  "submitted_to_finance",
-  "assessed",
-  "rejected",
-] as const;
 
 export default function NewCoffeeRecordPage() {
   const router = useRouter();
@@ -38,7 +25,6 @@ export default function NewCoffeeRecordPage() {
   );
   const [kilograms, setKilograms] = useState("");
   const [bags, setBags] = useState("");
-  const [status, setStatus] = useState<string>("pending");
 
   // Supplier autocomplete state
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -49,9 +35,10 @@ export default function NewCoffeeRecordPage() {
 
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(
-    null
-  );
+  const [message, setMessage] = useState<{
+    text: string;
+    type: "success" | "error";
+  } | null>(null);
 
   /* ------------------------------------------------------------------ */
   /* Auth check + Load suppliers                                        */
@@ -128,7 +115,10 @@ export default function NewCoffeeRecordPage() {
 
     // Ensure the supplier is actually selected from list (FK safety)
     if (!selectedSupplierId) {
-      setMessage({ text: "Please select a supplier from the list.", type: "error" });
+      setMessage({
+        text: "Please select a supplier from the list.",
+        type: "error",
+      });
       setSubmitting(false);
       return;
     }
@@ -178,9 +168,9 @@ export default function NewCoffeeRecordPage() {
           date,
           kilograms: kgNumber,
           bags: bagsNumber,
-          supplier_id: selectedSupplierId,     // FK -> suppliers.id (uuid)
-          supplier_name: supplierNameValue,    // denormalised label
-          status,
+          supplier_id: selectedSupplierId, // FK -> suppliers.id (uuid)
+          supplier_name: supplierNameValue, // denormalised label
+          status: "pending", // always pending by default
           batch_number: autoBatchNumber,
           created_by: user?.email ?? null,
         },
@@ -296,7 +286,8 @@ export default function NewCoffeeRecordPage() {
                           No suppliers found
                         </p>
                         <p className="text-xs text-red-700 dark:text-red-300 mt-1">
-                          Please create a supplier first before adding coffee records.
+                          Please create a supplier first before adding coffee
+                          records.
                         </p>
                         <Link
                           href="/suppliers/new"
@@ -352,22 +343,24 @@ export default function NewCoffeeRecordPage() {
                       supplierQuery &&
                       filteredSuppliers.length === 0 && (
                         <p className="mt-1 text-[11px] text-red-500 dark:text-red-400">
-                          No matching supplier. Check spelling or select from the list.
+                          No matching supplier. Check spelling or select from
+                          the list.
                         </p>
                       )}
 
                     {selectedSupplierId && (
                       <p className="mt-1 text-[11px] text-green-600 dark:text-green-400">
-                        Selected: <span className="font-semibold">{supplierName}</span>
+                        Selected:{" "}
+                        <span className="font-semibold">{supplierName}</span>
                       </p>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Date + Coffee Type + Status */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-1">
+              {/* Date + Coffee Type */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <label
                     className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
                     htmlFor="date"
@@ -387,43 +380,28 @@ export default function NewCoffeeRecordPage() {
                   </p>
                 </div>
 
-                <div className="md:col-span-1">
+                <div>
                   <label
                     className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
                     htmlFor="coffeeType"
                   >
                     Coffee Type *
                   </label>
-                  <input
+                  <select
                     id="coffeeType"
-                    type="text"
                     value={coffeeType}
                     onChange={(e) => setCoffeeType(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 transition-colors"
-                    placeholder="e.g. FAQ Robusta, Kiboko, Cherry"
-                    required
-                  />
-                </div>
-
-                <div className="md:col-span-1">
-                  <label
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
-                    htmlFor="status"
-                  >
-                    Status *
-                  </label>
-                  <select
-                    id="status"
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
                     className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 transition-colors"
+                    required
                   >
-                    {STATUS_OPTIONS.map((st) => (
-                      <option key={st} value={st}>
-                        {st.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                      </option>
-                    ))}
+                    <option value="">Select coffee type</option>
+                    <option value="Arabica">Arabica</option>
+                    <option value="Robusta">Robusta</option>
+                    <option value="Mixed">Mixed</option>
                   </select>
+                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    Choose Arabica, Robusta, or Mixed.
+                  </p>
                 </div>
               </div>
 
@@ -477,7 +455,8 @@ export default function NewCoffeeRecordPage() {
                   <span className="font-semibold">
                     configured automatically in the background
                   </span>{" "}
-                  when you save this record.
+                  when you save this record. Status starts as{" "}
+                  <span className="font-semibold">pending</span>.
                 </p>
               </div>
 
@@ -560,8 +539,10 @@ export default function NewCoffeeRecordPage() {
               </svg>
               <div>
                 <p className="text-sm text-blue-800 dark:text-blue-200">
-                  <span className="font-medium">Required fields</span> are marked with an asterisk (*). Make sure all
-                  information is accurate before saving the record.
+                  <span className="font-medium">Required fields</span> are
+                  marked with an asterisk (*). Coffee type is restricted to{" "}
+                  Arabica, Robusta, or Mixed, and new records always start with
+                  status <span className="font-semibold">pending</span>.
                 </p>
               </div>
             </div>

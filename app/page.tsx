@@ -92,13 +92,20 @@ export default function DashboardPage() {
     setStatsLoading(true);
 
     try {
-      // Date ranges (based on coffee "date" column)
       const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+      const startOfToday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      );
+      const startOfWeek = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 7
+      );
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      // 1️⃣ Suppliers count
+      // Suppliers count
       const { count: suppliersCount, error: suppliersError } = await supabase
         .from("suppliers")
         .select("*", { count: "exact", head: true });
@@ -107,7 +114,7 @@ export default function DashboardPage() {
         console.error("Error fetching suppliers count:", suppliersError);
       }
 
-      // 2️⃣ All coffee records (we'll compute stats on the frontend)
+      // Coffee records
       const {
         data: recordsData,
         error: recordsError,
@@ -135,7 +142,6 @@ export default function DashboardPage() {
           0
         );
 
-      // Filter by period using record.date
       const dailyRecordsArr = records.filter((r) => {
         const d = parseDate(r.date);
         return d && d >= startOfToday;
@@ -289,7 +295,8 @@ export default function DashboardPage() {
             <h2 className={`text-lg font-semibold ${textClass} mb-4`}>
               Quick Actions
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Suppliers */}
               <Link
                 href="/suppliers"
                 className={`${cardBgClass} rounded-lg border ${borderClass} p-6 hover:border-green-300 hover:shadow-sm transition-all group`}
@@ -318,6 +325,7 @@ export default function DashboardPage() {
                 </div>
               </Link>
 
+              {/* Coffee Records */}
               <Link
                 href="/coffee-records"
                 className={`${cardBgClass} rounded-lg border ${borderClass} p-6 hover:border-green-300 hover:shadow-sm transition-all group`}
@@ -338,6 +346,35 @@ export default function DashboardPage() {
                     </h3>
                     <p className={`text-sm ${textMutedClass} mt-1`}>
                       Manage delivery records
+                    </p>
+                  </div>
+                  <ChevronRight
+                    className={`w-5 h-5 ${textMutedClass} group-hover:${greenTextClass} transition-colors`}
+                  />
+                </div>
+              </Link>
+
+              {/* Milling Management */}
+              <Link
+                href="/milling"
+                className={`${cardBgClass} rounded-lg border ${borderClass} p-6 hover:border-green-300 hover:shadow-sm transition-all group`}
+              >
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`${greenBgClass} rounded-lg p-3 group-hover:${
+                      isDark ? "bg-green-800" : "bg-green-100"
+                    } transition-colors border ${greenBorderClass}`}
+                  >
+                    <Package className={`w-6 h-6 ${greenTextClass}`} />
+                  </div>
+                  <div className="flex-1">
+                    <h3
+                      className={`font-semibold ${textClass} group-hover:${greenTextClass} transition-colors`}
+                    >
+                      Milling Records
+                    </h3>
+                    <p className={`text-sm ${textMutedClass} mt-1`}>
+                      Create batches & track milling
                     </p>
                   </div>
                   <ChevronRight

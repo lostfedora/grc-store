@@ -14,12 +14,16 @@ import {
   Settings,
   LogOut,
   User,
+  Scale,
+  UserCheck, // 👈 added for Milling Customers
 } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", href: "/", icon: Home },
   { label: "Suppliers", href: "/suppliers", icon: Users },
   { label: "Coffee Records", href: "/coffee-records", icon: Coffee },
+  { label: "Milling", href: "/milling", icon: Scale },
+  { label: "Milling Customers", href: "/milling-customers", icon: UserCheck }, // 👈 new nav item
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -40,43 +44,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
-    
+
     try {
       // Add your actual logout logic here
-      // For example:
-      
-      // If using NextAuth.js:
-      // await signOut({ redirect: false });
-      
-      // If using Supabase Auth:
-      // const { error } = await supabase.auth.signOut();
-      // if (error) throw error;
-      
-      // If using custom token-based auth:
-      // localStorage.removeItem('token');
-      // sessionStorage.removeItem('user');
-      
-      // Clear any auth tokens/storage
-      localStorage.removeItem('auth-token');
-      sessionStorage.removeItem('user-session');
-      
-      // Add a small delay for better UX
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Redirect to login page
-      router.push('/auth');
-      
+
+      localStorage.removeItem("auth-token");
+      sessionStorage.removeItem("user-session");
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      router.push("/auth");
     } catch (error) {
-      console.error('Logout failed:', error);
-      // Fallback redirect even if there's an error
-      router.push('/auth');
+      console.error("Logout failed:", error);
+      router.push("/auth");
     } finally {
       setIsLoggingOut(false);
     }
   };
 
   const confirmLogout = () => {
-    if (window.confirm('Are you sure you want to log out?')) {
+    if (window.confirm("Are you sure you want to log out?")) {
       handleLogout();
     }
   };
@@ -201,7 +188,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               }
             `}
           >
-            <LogOut className={`w-4 h-4 ${isLoggingOut ? "animate-pulse" : ""}`} />
+            <LogOut
+              className={`w-4 h-4 ${isLoggingOut ? "animate-pulse" : ""}`}
+            />
             <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
           </button>
 

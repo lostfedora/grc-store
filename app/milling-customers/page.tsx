@@ -6,115 +6,62 @@ import supabase from "@/lib/supabaseClient";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import Link from "next/link";
 import {
-  Coffee,
+  Users,
   Plus,
   RefreshCcw,
   Search,
   Filter,
   Loader2,
   ArrowLeft,
+  Phone,
+  MapPin,
   Calendar,
-  Package,
-  User as UserIcon,
-  Scale,
-  BarChart3,
   X,
-  Edit,
   FileText,
+  User as UserIcon,
 } from "lucide-react";
 
-type CoffeeRecord = {
+type MillingCustomer = {
   id: string;
-  coffee_type: string;
-  date: string;
-  kilograms: number;
-  bags: number;
-  supplier_id: string | null;
-  supplier_name: string;
-  status: string;
-  batch_number: string;
+  full_name: string;
+  opening_balance: number;
+  current_balance: number;
+  phone: string | null;
+  address: string | null;
   created_at: string;
   updated_at: string;
-  created_by: string | null;
-};
-
-const STATUS_OPTIONS = [
-  "all",
-  "pending",
-  "quality_review",
-  "pricing",
-  "batched",
-  "drying",
-  "sales",
-  "inventory",
-  "submitted_to_finance",
-  "assessed",
-  "rejected",
-];
-
-const getStatusColor = (status: string) => {
-  const colors = {
-    pending:
-      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-    quality_review:
-      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-    pricing:
-      "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-    batched:
-      "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-    drying:
-      "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-    sales:
-      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-    inventory:
-      "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
-    submitted_to_finance:
-      "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
-    assessed:
-      "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-    rejected:
-      "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  };
-  return (
-    colors[status as keyof typeof colors] ||
-    "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
-  );
-};
-
-const formatStatus = (status: string) => {
-  return status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  status: string;
 };
 
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-UG", {
     year: "numeric",
-    month: "long",
+    month: "short",
     day: "numeric",
   });
 };
 
 const formatDateTime = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleString("en-UG", {
     year: "numeric",
-    month: "long",
+    month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
 };
 
-export default function CoffeeRecordsListPage() {
+export default function MillingCustomersPage() {
   const router = useRouter();
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [records, setRecords] = useState<CoffeeRecord[]>([]);
+  const [customers, setCustomers] = useState<MillingCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingList, setLoadingList] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selectedRecord, setSelectedRecord] = useState<CoffeeRecord | null>(
-    null
-  );
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<MillingCustomer | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Auth check + initial load
@@ -128,29 +75,28 @@ export default function CoffeeRecordsListPage() {
       }
 
       setUser(data.user);
-      fetchCoffeeRecords();
+      fetchCustomers();
     };
 
     checkAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  const fetchCoffeeRecords = async () => {
+  const fetchCustomers = async () => {
     setLoading(true);
     setError(null);
 
     const { data, error } = await supabase
-      .from("coffee_records")
+      .from("milling_customers")
       .select("*")
-      .order("date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(200);
+      .order("full_name", { ascending: true })
+      .limit(500);
 
     if (error) {
       setError(error.message);
-      setRecords([]);
+      setCustomers([]);
     } else {
-      setRecords((data || []) as CoffeeRecord[]);
+      setCustomers((data || []) as MillingCustomer[]);
     }
 
     setLoading(false);
@@ -161,49 +107,71 @@ export default function CoffeeRecordsListPage() {
     setError(null);
 
     const { data, error } = await supabase
-      .from("coffee_records")
+      .from("milling_customers")
       .select("*")
-      .order("date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(200);
+      .order("full_name", { ascending: true })
+      .limit(500);
 
     if (error) {
       setError(error.message);
-      setRecords([]);
+      setCustomers([]);
     } else {
-      setRecords((data || []) as CoffeeRecord[]);
+      setCustomers((data || []) as MillingCustomer[]);
     }
 
     setLoadingList(false);
   };
 
-  const handleViewDetails = (record: CoffeeRecord) => {
-    setSelectedRecord(record);
+  const handleViewDetails = (customer: MillingCustomer) => {
+    setSelectedCustomer(customer);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
-    setSelectedRecord(null);
+    setSelectedCustomer(null);
   };
 
-  const filteredRecords = useMemo(() => {
-    let list = records;
+  const statusOptions = useMemo(
+    () => Array.from(new Set(customers.map((c) => c.status))),
+    [customers]
+  );
+
+  const filteredCustomers = useMemo(() => {
+    let list = customers;
 
     if (statusFilter !== "all") {
-      list = list.filter((r) => r.status === statusFilter);
+      list = list.filter((c) => c.status === statusFilter);
     }
 
     if (!search.trim()) return list;
 
     const term = search.toLowerCase();
     return list.filter(
-      (r) =>
-        r.supplier_name.toLowerCase().includes(term) ||
-        r.batch_number.toLowerCase().includes(term) ||
-        r.coffee_type.toLowerCase().includes(term)
+      (c) =>
+        c.full_name.toLowerCase().includes(term) ||
+        (c.phone || "").toLowerCase().includes(term) ||
+        (c.address || "").toLowerCase().includes(term)
     );
-  }, [records, search, statusFilter]);
+  }, [customers, search, statusFilter]);
+
+  const totalOpening = useMemo(
+    () =>
+      customers.reduce(
+        (sum, c) => sum + Number(c.opening_balance || 0),
+        0
+      ),
+    [customers]
+  );
+
+  const totalBalance = useMemo(
+    () =>
+      customers.reduce(
+        (sum, c) => sum + Number(c.current_balance || 0),
+        0
+      ),
+    [customers]
+  );
 
   if (loading && !user) {
     return (
@@ -226,14 +194,14 @@ export default function CoffeeRecordsListPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 border border-green-200 dark:border-green-800 transition-colors">
-                <Coffee className="w-6 h-6 text-green-600 dark:text-green-400" />
+                <Users className="w-6 h-6 text-green-600 dark:text-green-400" />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-green-700 dark:text-green-400">
-                  Coffee Records
+                  Milling Customers
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  All coffee deliveries captured by the store
+                  Customers with milling / hulling accounts at Great Pearl Coffee
                 </p>
               </div>
             </div>
@@ -261,11 +229,11 @@ export default function CoffeeRecordsListPage() {
               </button>
 
               <Link
-                href="/coffee-records/new"
+                href="/milling-customers/new"
                 className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                New Record
+                New Customer
               </Link>
             </div>
           </div>
@@ -282,7 +250,7 @@ export default function CoffeeRecordsListPage() {
                 <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search by supplier, batch, or coffee type..."
+                  placeholder="Search by name, phone, or address..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-colors"
@@ -297,16 +265,17 @@ export default function CoffeeRecordsListPage() {
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:focus:ring-green-400 dark:focus:border-green-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-white transition-colors"
                   >
-                    {STATUS_OPTIONS.map((st) => (
+                    <option value="all">All Status</option>
+                    {statusOptions.map((st) => (
                       <option key={st} value={st}>
-                        {st === "all" ? "All Statuses" : formatStatus(st)}
+                        {st}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                  {filteredRecords.length} of {records.length} records
+                  {filteredCustomers.length} of {customers.length} customers
                 </div>
               </div>
             </div>
@@ -327,7 +296,7 @@ export default function CoffeeRecordsListPage() {
                     />
                   </svg>
                   <p className="text-red-700 dark:text-red-300 font-medium">
-                    Error loading coffee records: {error}
+                    Error loading milling customers: {error}
                   </p>
                 </div>
               </div>
@@ -339,136 +308,118 @@ export default function CoffeeRecordsListPage() {
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-8 text-center transition-colors">
               <Loader2 className="w-8 h-8 text-green-600 animate-spin mx-auto mb-4" />
               <p className="text-gray-600 dark:text-gray-400">
-                Loading coffee records...
+                Loading milling customers...
               </p>
             </div>
           ) : (
             <>
               {/* Records Grid */}
-              {filteredRecords.length === 0 ? (
+              {filteredCustomers.length === 0 ? (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-12 text-center transition-colors">
-                  <Coffee className="w-16 h-16 text-gray-300 dark:text-slate-600 mx-auto mb-4" />
+                  <Users className="w-16 h-16 text-gray-300 dark:text-slate-600 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                     {search || statusFilter !== "all"
-                      ? "No records found"
-                      : "No coffee records yet"}
+                      ? "No customers found"
+                      : "No milling customers yet"}
                   </h3>
                   <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
                     {search || statusFilter !== "all"
-                      ? "Try adjusting your search terms or filters to find what you're looking for."
-                      : "Get started by capturing your first coffee delivery record."}
+                      ? "Try adjusting your search terms or filters."
+                      : "Get started by registering your first milling customer."}
                   </p>
                   {!search && statusFilter === "all" && (
                     <Link
-                      href="/coffee-records/new"
+                      href="/milling-customers/new"
                       className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                     >
                       <Plus className="w-5 h-5" />
-                      Create First Record
+                      Create First Customer
                     </Link>
                   )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredRecords.map((record) => (
+                  {filteredCustomers.map((customer) => (
                     <div
-                      key={record.id}
+                      key={customer.id}
                       className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 hover:shadow-lg dark:hover:shadow-slate-700/20 transition-all duration-200 hover:border-green-200 dark:hover:border-green-800 transition-colors"
                     >
                       {/* Header */}
                       <div className="flex items-start justify-between mb-4">
                         <div>
                           <h3 className="font-semibold text-gray-900 dark:text-white text-lg mb-1">
-                            {record.batch_number}
+                            {customer.full_name}
                           </h3>
                           <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                              record.status
-                            )}`}
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              customer.status === "Active"
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                            }`}
                           >
-                            {formatStatus(record.status)}
+                            {customer.status}
                           </span>
                         </div>
                         <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                          <Coffee className="w-5 h-5 text-green-600 dark:text-green-400" />
+                          <UserIcon className="w-5 h-5 text-green-600 dark:text-green-400" />
                         </div>
                       </div>
 
                       {/* Details */}
                       <div className="space-y-3">
-                        {/* Date */}
+                        {/* Phone */}
                         <div className="flex items-center gap-3">
                           <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
-                            <Calendar className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                            <Phone className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                              Date
-                            </p>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {record.date}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Supplier */}
-                        <div className="flex items-center gap-3">
-                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
-                            <UserIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              Supplier
+                              Phone
                             </p>
                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                              {record.supplier_name}
+                              {customer.phone || "Not provided"}
                             </p>
                           </div>
                         </div>
 
-                        {/* Coffee Type */}
+                        {/* Address */}
                         <div className="flex items-center gap-3">
                           <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
-                            <Package className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                            <MapPin className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                              Coffee Type
+                              Address
                             </p>
                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                              {record.coffee_type}
+                              {customer.address || "Not provided"}
                             </p>
                           </div>
                         </div>
 
-                        {/* Weight and Bags */}
+                        {/* Balances */}
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
-                              <Scale className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Weight
-                              </p>
-                              <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                                {Number(record.kilograms).toLocaleString()} kg
-                              </p>
-                            </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Opening Balance
+                            </p>
+                            <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+                              UGX{" "}
+                              {Number(
+                                customer.opening_balance
+                              ).toLocaleString()}
+                            </p>
                           </div>
-
-                          <div className="flex items-center gap-3">
-                            <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
-                              <BarChart3 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Bags
-                              </p>
-                              <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                                {record.bags}
-                              </p>
-                            </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Current Balance
+                            </p>
+                            <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                              UGX{" "}
+                              {Number(
+                                customer.current_balance
+                              ).toLocaleString()}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -476,7 +427,7 @@ export default function CoffeeRecordsListPage() {
                       {/* Actions */}
                       <div className="mt-6 pt-4 border-t border-gray-200 dark:border-slate-700 transition-colors">
                         <button
-                          onClick={() => handleViewDetails(record)}
+                          onClick={() => handleViewDetails(customer)}
                           className="w-full bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 py-2 px-4 rounded-lg font-medium hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors text-sm"
                         >
                           View Details
@@ -488,20 +439,20 @@ export default function CoffeeRecordsListPage() {
               )}
 
               {/* Quick Stats */}
-              {!loading && records.length > 0 && (
+              {!loading && customers.length > 0 && (
                 <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 transition-colors">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Total Records
+                          Total Customers
                         </p>
                         <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {records.length}
+                          {customers.length}
                         </p>
                       </div>
                       <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                        <Coffee className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
                       </div>
                     </div>
                   </div>
@@ -510,17 +461,14 @@ export default function CoffeeRecordsListPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Total Weight
+                          Opening Balances
                         </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {records
-                            .reduce((sum, r) => sum + r.kilograms, 0)
-                            .toLocaleString()}{" "}
-                          kg
+                        <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                          UGX {totalOpening.toLocaleString()}
                         </p>
                       </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                        <Scale className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-2 transition-colors">
+                        <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       </div>
                     </div>
                   </div>
@@ -529,16 +477,14 @@ export default function CoffeeRecordsListPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                          Total Bags
+                          Current Balances
                         </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {records
-                            .reduce((sum, r) => sum + r.bags, 0)
-                            .toLocaleString()}
+                        <p className="text-2xl font-bold text-red-700 dark:text-red-400">
+                          UGX {totalBalance.toLocaleString()}
                         </p>
                       </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
-                        <Package className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-2 transition-colors">
+                        <FileText className="w-5 h-5 text-red-600 dark:text-red-400" />
                       </div>
                     </div>
                   </div>
@@ -550,7 +496,7 @@ export default function CoffeeRecordsListPage() {
                           Filtered
                         </p>
                         <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                          {filteredRecords.length}
+                          {filteredCustomers.length}
                         </p>
                       </div>
                       <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
@@ -565,10 +511,10 @@ export default function CoffeeRecordsListPage() {
         </div>
       </section>
 
-      {/* Details Modal with blurred background */}
-      {isModalOpen && selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transition-colors shadow-2xl">
+      {/* Details Modal */}
+      {isModalOpen && selectedCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transition-colors">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700 transition-colors">
               <div className="flex items-center gap-3">
@@ -577,10 +523,10 @@ export default function CoffeeRecordsListPage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                    Record Details
+                    Customer Details
                   </h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Complete information for this coffee record
+                    Full information for this milling customer
                   </p>
                 </div>
               </div>
@@ -594,116 +540,97 @@ export default function CoffeeRecordsListPage() {
 
             {/* Modal Content */}
             <div className="p-6 space-y-6">
-              {/* Batch and Status */}
+              {/* Basic Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Batch Information
+                    Customer Information
                   </h3>
                   <div className="space-y-3">
                     <div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Batch Number
+                        Full Name
                       </p>
                       <p className="text-lg font-medium text-gray-900 dark:text-white">
-                        {selectedRecord.batch_number}
+                        {selectedCustomer.full_name}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Coffee Type
-                      </p>
-                      <p className="text-lg font-medium text-gray-900 dark:text-white">
-                        {selectedRecord.coffee_type}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Status & Dates
-                  </h3>
-                  <div className="space-y-3">
                     <div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         Status
                       </p>
                       <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
-                          selectedRecord.status
-                        )}`}
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                          selectedCustomer.status === "Active"
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                            : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                        }`}
                       >
-                        {formatStatus(selectedRecord.status)}
+                        {selectedCustomer.status}
                       </span>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Delivery Date
-                      </p>
-                      <p className="text-lg font-medium text-gray-900 dark:text-white">
-                        {formatDate(selectedRecord.date)}
-                      </p>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    Contact
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <Phone className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Phone
+                        </p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {selectedCustomer.phone || "Not provided"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <MapPin className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Address
+                        </p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {selectedCustomer.address || "Not provided"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Supplier Information */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Supplier Information
-                </h3>
-                <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-4 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <UserIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {selectedRecord.supplier_name}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Supplier ID: {selectedRecord.supplier_id || "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Delivery Details */}
+              {/* Balances & System Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                    Delivery Details
+                    Balance Summary
                   </h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/30 rounded-lg transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Scale className="w-5 h-5 text-green-600 dark:text-green-400" />
-                        <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Total Weight
-                          </p>
-                          <p className="text-xl font-bold text-green-700 dark:text-green-400">
-                            {Number(
-                              selectedRecord.kilograms
-                            ).toLocaleString()}{" "}
-                            kg
-                          </p>
-                        </div>
-                      </div>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-center justify-between py-2 border-b border-gray-200 dark:border-slate-700 transition-colors">
+                      <span className="text-gray-600 dark:text-gray-400">
+                        Opening Balance
+                      </span>
+                      <span className="font-semibold text-blue-700 dark:text-blue-400">
+                        UGX{" "}
+                        {Number(
+                          selectedCustomer.opening_balance
+                        ).toLocaleString()}
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Package className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                        <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Total Bags
-                          </p>
-                          <p className="text-xl font-bold text-blue-700 dark:text-blue-400">
-                            {selectedRecord.bags} bags
-                          </p>
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-gray-600 dark:text-gray-400">
+                        Current Balance
+                      </span>
+                      <span className="font-semibold text-red-700 dark:text-red-400">
+                        UGX{" "}
+                        {Number(
+                          selectedCustomer.current_balance
+                        ).toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -715,18 +642,10 @@ export default function CoffeeRecordsListPage() {
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between py-2 border-b border-gray-200 dark:border-slate-700 transition-colors">
                       <span className="text-gray-600 dark:text-gray-400">
-                        Created By
-                      </span>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {selectedRecord.created_by || "System"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b border-gray-200 dark:border-slate-700 transition-colors">
-                      <span className="text-gray-600 dark:text-gray-400">
                         Created At
                       </span>
                       <span className="font-medium text-gray-900 dark:text-white">
-                        {formatDateTime(selectedRecord.created_at)}
+                        {formatDateTime(selectedCustomer.created_at)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between py-2">
@@ -734,7 +653,7 @@ export default function CoffeeRecordsListPage() {
                         Last Updated
                       </span>
                       <span className="font-medium text-gray-900 dark:text-white">
-                        {formatDateTime(selectedRecord.updated_at)}
+                        {formatDateTime(selectedCustomer.updated_at)}
                       </span>
                     </div>
                   </div>
@@ -750,10 +669,14 @@ export default function CoffeeRecordsListPage() {
               >
                 Close
               </button>
-              <button className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+              {/* You can later wire this to /milling-customers/[id]/edit */}
+              {/* <Link
+                href={`/milling-customers/${selectedCustomer.id}/edit`}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+              >
                 <Edit className="w-4 h-4" />
-                Edit Record
-              </button>
+                Edit Customer
+              </Link> */}
             </div>
           </div>
         </div>

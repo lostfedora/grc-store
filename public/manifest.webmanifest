@@ -1,15 +1,13 @@
 {
-  "id": "/",
-  "name": "Great Pearl Coffee System",
-  "short_name": "Store App",
-  "description": "Coffee sourcing, store and finance workflow for Great Pearl Coffee.",
+  "name": "Lite Manager",
+  "short_name": "Lite Manager",
+  "description": "Lite Manager: simple, fast milling and coffee records management.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#020617",
-  "theme_color": "#047857",
-  "categories": ["business", "productivity"],
+  "theme_color": "#16a34a",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
@@ -20,12 +18,6 @@
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png"
-    },
-    {
-      "src": "/icons/maskable-icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
     }
   ]
 }

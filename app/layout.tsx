@@ -5,7 +5,7 @@ import "./globals.css";
 import AppShell from "@/components/AppShell";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
-// Configure fonts with error handling and fallbacks
+// Fonts
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -15,7 +15,7 @@ const geistSans = Geist({
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono", 
+  variable: "--font-geist-mono",
   subsets: ["latin"],
   display: "swap",
   fallback: ["monospace"],
@@ -23,8 +23,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Great Pearl Coffee Console",
-  description: "Yeda Group / Great Pearl Coffee management system",
+  title: "Lite Manager",
+  description: "Lite Manager – simple, fast management for Yeda Group / Great Pearl Coffee.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -38,12 +38,12 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "GPCStore",
+    title: "Lite Manager",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#047857",
+  themeColor: "#16a34a",
   width: "device-width",
   initialScale: 1,
   minimumScale: 1,
@@ -64,9 +64,10 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        {/* PWA / iOS specific tags (mirror metadata.appleWebApp) */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="GPCStore" />
+        <meta name="apple-mobile-web-app-title" content="Lite Manager" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
       <body
