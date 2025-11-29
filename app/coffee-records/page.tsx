@@ -461,8 +461,9 @@ export default function CoffeeRecordsListPage() {
           {/* Search and Filters */}
           <div className="mb-6">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
-              <div className="flex flex-col sm:flex-row gap-4 flex-1 max-w-3xl">
-                <div className="relative flex-1 max-w-md">
+              {/* LEFT SIDE: search + date filters */}
+              <div className="flex flex-col sm:flex-row gap-4 flex-1 w-full">
+                <div className="relative flex-1 w-full min-w-[260px]">
                   <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
@@ -508,6 +509,7 @@ export default function CoffeeRecordsListPage() {
                 </div>
               </div>
 
+              {/* RIGHT SIDE: status filter, view toggle, count */}
               <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4 text-gray-400" />
@@ -669,18 +671,12 @@ export default function CoffeeRecordsListPage() {
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-12 text-center transition-colors">
                   <Coffee className="w-16 h-16 text-gray-300 dark:text-slate-600 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    {search ||
-                    statusFilter !== "all" ||
-                    dateFrom ||
-                    dateTo
+                    {search || statusFilter !== "all" || dateFrom || dateTo
                       ? "No records found"
                       : "No coffee records yet"}
                   </h3>
                   <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                    {search ||
-                    statusFilter !== "all" ||
-                    dateFrom ||
-                    dateTo
+                    {search || statusFilter !== "all" || dateFrom || dateTo
                       ? "Try adjusting your search terms, date range, or filters."
                       : "Get started by capturing your first coffee delivery record."}
                   </p>
@@ -702,7 +698,7 @@ export default function CoffeeRecordsListPage() {
                   {paginatedRecords.map((record) => (
                     <div
                       key={record.id}
-                      className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 hover:shadow-lg dark:hover:shadow-slate-700/20 transition-all duration-200 hover:border-green-200 dark:hover:border-green-800 transition-colors"
+                      className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 hover:shadow-lg dark:hover:shadow-slate-700/20 transition-all duration-200 hover:border-green-200 dark:hover:border-green-800"
                     >
                       {/* Header */}
                       <div className="flex items-start justify-between mb-4">
@@ -718,7 +714,7 @@ export default function CoffeeRecordsListPage() {
                             {formatStatus(record.status)}
                           </span>
                         </div>
-                        <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2 transition-colors">
+                        <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-2">
                           <Coffee className="w-5 h-5 text-green-600 dark:text-green-400" />
                         </div>
                       </div>
@@ -727,7 +723,7 @@ export default function CoffeeRecordsListPage() {
                       <div className="space-y-3">
                         {/* Date */}
                         <div className="flex items-center gap-3">
-                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
+                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5">
                             <Calendar className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -742,7 +738,7 @@ export default function CoffeeRecordsListPage() {
 
                         {/* Supplier */}
                         <div className="flex items-center gap-3">
-                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
+                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5">
                             <UserIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -757,7 +753,7 @@ export default function CoffeeRecordsListPage() {
 
                         {/* Coffee Type */}
                         <div className="flex items-center gap-3">
-                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
+                          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5">
                             <Package className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -773,7 +769,7 @@ export default function CoffeeRecordsListPage() {
                         {/* Weight and Bags */}
                         <div className="grid grid-cols-2 gap-4">
                           <div className="flex items-center gap-3">
-                            <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
+                            <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5">
                               <Scale className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                             </div>
                             <div>
@@ -787,7 +783,7 @@ export default function CoffeeRecordsListPage() {
                           </div>
 
                           <div className="flex items-center gap-3">
-                            <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5 transition-colors">
+                            <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-1.5">
                               <BarChart3 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                             </div>
                             <div>
@@ -1116,7 +1112,7 @@ export default function CoffeeRecordsListPage() {
                     System Information
                   </h3>
                   <div className="space-y-3 text-sm">
-                    <div className="flex items-center justify-between py-2 border-b border-gray-200 dark:border-slate-700 transition-colors">
+                    <div className="flex items-center justify-between py-2 border-b border-gray-200 dark:border-slate-707 transition-colors">
                       <span className="text-gray-600 dark:text-gray-400">
                         Created By
                       </span>
