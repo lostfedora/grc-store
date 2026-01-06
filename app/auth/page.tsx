@@ -153,8 +153,7 @@ export default function LoginPage() {
       // 4) All good → redirect immediately (no timeout)
       setMessage({ text: 'Signed in successfully! Redirecting...', type: 'success' });
 
-      // Go directly to the balancing report (or your home)
-      router.push('/reports/balancing');
+      router.push('/');
     } catch (err: any) {
       setMessage({ text: `Unexpected error: ${err?.message || 'Unknown error'}`, type: 'error' });
     } finally {
