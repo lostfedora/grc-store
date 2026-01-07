@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -30,31 +30,60 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const [isPWA, setIsPWA] = useState(false);
+
+  useEffect(() => {
+    // Detect if running as PWA
+    const isInStandaloneMode = () =>
+      window.matchMedia('(display-mode: standalone)').matches || 
+      (window.navigator as any).standalone ||
+      document.referrer.includes('android-app://');
+    
+    setIsPWA(isInStandaloneMode());
+  }, []);
 
   const toggleDrawer = () => setOpen((prev) => !prev);
   const closeDrawer = () => setOpen(false);
 
-  // Mock user data - replace with your actual auth context/user data
+  // Mock user data
   const user = {
     name: "Admin User",
     email: "admin@greatpearlcoffee.com",
     role: "Administrator",
   };
 
+  // Enhanced navigation handler for PWA
+  const handleNavigation = (href: string) => {
+    closeDrawer();
+    
+    if (isPWA) {
+      // Force hard navigation in PWA mode
+      window.location.href = href;
+    } else {
+      router.push(href);
+    }
+  };
+
   const handleLogout = async () => {
     setIsLoggingOut(true);
-
     try {
-      // Add your actual logout logic here
       localStorage.removeItem("auth-token");
       sessionStorage.removeItem("user-session");
-
+      
       await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      router.push("/auth");
+      
+      if (isPWA) {
+        window.location.href = "/auth";
+      } else {
+        router.push("/auth");
+      }
     } catch (error) {
       console.error("Logout failed:", error);
-      router.push("/auth");
+      if (isPWA) {
+        window.location.href = "/auth";
+      } else {
+        router.push("/auth");
+      }
     } finally {
       setIsLoggingOut(false);
     }
@@ -68,7 +97,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 flex">
-      {/* Mobile overlay (always above page content) */}
+      {/* Mobile overlay */}
       {open && (
         <div
           className="fixed inset-0 bg-black/40 z-[70] md:hidden"
@@ -76,7 +105,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Sidebar (drawer) */}
+      {/* Sidebar */}
       <aside
         className={`
           fixed inset-y-0 left-0 w-64
@@ -111,7 +140,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             </div>
           </div>
-
           <button
             className="md:hidden p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
             onClick={closeDrawer}
@@ -121,7 +149,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* User Info Section */}
+        {/* User Info */}
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-900 rounded-full flex items-center justify-center">
@@ -145,13 +173,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             const active = pathname === item.href;
 
             return (
-              <Link
+              <button
                 key={item.href}
-                href={item.href}
-                onClick={closeDrawer}
+                onClick={() => handleNavigation(item.href)}
                 className={`
                   flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                  transition-colors
+                  transition-colors w-full text-left
                   ${
                     active
                       ? "bg-emerald-600 text-white"
@@ -167,24 +194,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   }`}
                 />
                 <span>{item.label}</span>
-              </Link>
+              </button>
             );
           })}
         </nav>
 
-        {/* Footer with Logout */}
+        {/* Footer */}
         <div className="mt-auto border-t border-slate-200 dark:border-slate-800">
-          {/* Settings Link (optional) */}
-          <Link
-            href="/settings"
-            onClick={closeDrawer}
-            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-200 dark:border-slate-800"
+          <button
+            onClick={() => handleNavigation("/settings")}
+            className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-200 dark:border-slate-800"
           >
             <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             <span>Settings</span>
-          </Link>
+          </button>
 
-          {/* Logout Button */}
           <button
             onClick={confirmLogout}
             disabled={isLoggingOut}
@@ -204,11 +228,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
           </button>
 
-          {/* System Info */}
           <div className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
             <div>
               <p className="font-medium">Yeda Group System</p>
               <p className="mt-0.5">Lite Manager · v1.0</p>
+              {isPWA && <p className="mt-0.5 text-[10px]">PWA Mode</p>}
             </div>
             <div className="w-7 h-7 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-emerald-300/70 dark:border-emerald-700/70 flex items-center justify-center">
               <Image
@@ -223,9 +247,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main content area */}
+      {/* Main content */}
       <div className="relative flex-1 flex flex-col md:ml-64 min-h-screen z-[10]">
-        {/* Mobile top bar */}
         <header className="md:hidden sticky top-0 z-[20] bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 backdrop-blur">
           <div className="flex items-center justify-between px-4 py-3">
             <button
@@ -257,7 +280,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Page content */}
         <main className="flex-1">{children}</main>
       </div>
     </div>
