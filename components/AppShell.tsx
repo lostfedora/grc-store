@@ -15,6 +15,7 @@ import {
   LogOut,
   User,
   UserCheck,
+  FileText,
 } from "lucide-react";
 
 const navItems = [
@@ -23,6 +24,8 @@ const navItems = [
   { label: "Coffee Records", href: "/coffee-records", icon: Coffee },
   { label: "Milling", href: "/milling", icon: Scale },
   { label: "Milling Customers", href: "/milling-customers", icon: UserCheck },
+  { label: "Reports", href: "/reports/balancing", icon: FileText },
+
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
