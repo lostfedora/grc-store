@@ -21,7 +21,6 @@ import {
   MapPin,
   X,
   Home,
-  Truck,
   UserPlus,
   PlusCircle,
   Filter,
@@ -30,8 +29,6 @@ import {
   Box,
   CreditCard,
   FileText,
-  Menu,
-  ChevronDown,
 } from "lucide-react";
 
 type TimeFilter = "daily" | "weekly" | "monthly";
@@ -79,9 +76,6 @@ export default function DashboardPage() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("monthly");
   const [isDark, setIsDark] = useState(false);
-
-  /* Mobile menu state */
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   /* Modal states */
   const [modalOpen, setModalOpen] = useState<null | "coffee" | "millingTx" | "millingCustomer">(null);
@@ -1105,41 +1099,24 @@ export default function DashboardPage() {
 
   return (
     <main className={`min-h-screen ${bgClass} transition-colors duration-200`}>
-      {/* Header */}
+      {/* Header - Simplified */}
       <header className={`${cardBgClass} border-b ${borderClass} px-3 sm:px-4 py-3 sm:py-4 sticky top-0 z-10 backdrop-blur-md transition-colors duration-200`}>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className={`sm:hidden p-2 rounded-lg ${hoverClass} border ${borderClass} transition-all hover:scale-105`}
-                aria-label="Toggle menu"
-              >
-                <Menu className={`w-5 h-5 ${textMutedClass}`} />
-              </button>
-              
               <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-gradient-to-r ${greenGradient} border ${greenBorderClass} flex-shrink-0`}>
                 <Coffee className={`w-5 h-5 sm:w-6 sm:h-6 ${greenTextClass}`} />
               </div>
               
               <div className="min-w-0">
                 <h1 className={`text-lg sm:text-2xl font-bold ${greenTextClass} truncate`}>Great Pearl Coffee</h1>
-                <p className={`text-xs sm:text-sm ${textMutedClass} flex items-center gap-1 truncate`}>
-                  <Shield className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">Welcome back, <span className="font-medium ml-0.5">{user?.email}</span></span>
+                <p className={`text-xs sm:text-sm ${textMutedClass} truncate`}>
+                  Welcome back, <span className="font-medium">{user?.email}</span>
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Link
-                href="/"
-                className={`hidden sm:flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm ${textMutedClass} ${hoverClass} rounded-lg transition-all border ${borderClass} hover:scale-[1.02]`}
-              >
-                <Home className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Home</span>
-              </Link>
-              
               <button
                 onClick={handleLogout}
                 disabled={logoutLoading}
@@ -1154,45 +1131,6 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
-
-          {/* Mobile Menu */}
-          {mobileMenuOpen && (
-            <div className={`sm:hidden mt-3 p-3 rounded-lg border ${borderClass} ${cardBgClass} animate-in slide-in-from-top-5 duration-200`}>
-              <div className="space-y-2">
-                <Link
-                  href="/"
-                  className={`flex items-center gap-2 px-3 py-2 text-sm ${textMutedClass} ${hoverClass} rounded-lg transition-all border ${borderClass}`}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <Home className="w-4 h-4" />
-                  Home
-                </Link>
-                <div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />
-                <p className={`text-xs ${textMutedClass} px-2 py-1`}>Quick Actions:</p>
-                <button
-                  onClick={() => { setModalOpen("coffee"); setMobileMenuOpen(false); }}
-                  className={`flex items-center gap-2 px-3 py-2 text-sm ${textClass} ${hoverClass} rounded-lg transition-all border ${borderClass} w-full text-left`}
-                >
-                  <Coffee className="w-4 h-4" />
-                  Add Coffee Record
-                </button>
-                <button
-                  onClick={() => { setModalOpen("millingTx"); setMobileMenuOpen(false); }}
-                  className={`flex items-center gap-2 px-3 py-2 text-sm ${textClass} ${hoverClass} rounded-lg transition-all border ${borderClass} w-full text-left`}
-                >
-                  <ClipboardList className="w-4 h-4" />
-                  Add Milling Tx
-                </button>
-                <button
-                  onClick={() => { setModalOpen("millingCustomer"); setMobileMenuOpen(false); }}
-                  className={`flex items-center gap-2 px-3 py-2 text-sm ${textClass} ${hoverClass} rounded-lg transition-all border ${borderClass} w-full text-left`}
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Add Milling Customer
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </header>
 
@@ -1227,69 +1165,6 @@ export default function DashboardPage() {
                 description="Add new milling customers to your system"
                 color="teal"
               />
-            </div>
-          </div>
-
-          {/* Quick Navigation Cards */}
-          <div className="mb-6 sm:mb-8">
-            <h2 className={`text-lg sm:text-xl font-semibold ${textClass} mb-4 sm:mb-6 flex items-center gap-2`}>
-              <Box className="w-4 h-4 sm:w-5 sm:h-5" />
-              Quick Navigation
-            </h2>
-            <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
-              <Link
-                href="/suppliers"
-                className={`${cardBgClass} rounded-xl sm:rounded-2xl border ${borderClass} p-4 sm:p-6 hover:border-emerald-300/50 hover:shadow-lg sm:hover:shadow-xl transition-all duration-300 group hover:scale-[1.02]`}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-r ${greenGradient} border ${greenBorderClass} group-hover:scale-110 transition-transform duration-300`}>
-                    <Users className={`w-4 h-4 sm:w-6 sm:h-6 ${greenTextClass}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className={`font-semibold ${textClass} group-hover:${greenTextClass} transition-colors duration-300 text-sm sm:text-base truncate`}>
-                      Manage Suppliers
-                    </h3>
-                    <p className={`text-xs sm:text-sm ${textMutedClass} mt-0.5 sm:mt-1 line-clamp-2`}>View and manage suppliers</p>
-                  </div>
-                  <ChevronRight className={`w-4 h-4 sm:w-5 sm:h-5 ${textMutedClass} group-hover:${greenTextClass} group-hover:translate-x-0.5 sm:group-hover:translate-x-1 transition-all duration-300 flex-shrink-0`} />
-                </div>
-              </Link>
-
-              <Link
-                href="/coffee-records"
-                className={`${cardBgClass} rounded-xl sm:rounded-2xl border ${borderClass} p-4 sm:p-6 hover:border-emerald-300/50 hover:shadow-lg sm:hover:shadow-xl transition-all duration-300 group hover:scale-[1.02]`}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-r ${greenGradient} border ${greenBorderClass} group-hover:scale-110 transition-transform duration-300`}>
-                    <Coffee className={`w-4 h-4 sm:w-6 sm:h-6 ${greenTextClass}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className={`font-semibold ${textClass} group-hover:${greenTextClass} transition-colors duration-300 text-sm sm:text-base truncate`}>
-                      Coffee Records
-                    </h3>
-                    <p className={`text-xs sm:text-sm ${textMutedClass} mt-0.5 sm:mt-1 line-clamp-2`}>Manage delivery records</p>
-                  </div>
-                  <ChevronRight className={`w-4 h-4 sm:w-5 sm:h-5 ${textMutedClass} group-hover:${greenTextClass} group-hover:translate-x-0.5 sm:group-hover:translate-x-1 transition-all duration-300 flex-shrink-0`} />
-                </div>
-              </Link>
-
-              <Link
-                href="/milling"
-                className={`${cardBgClass} rounded-xl sm:rounded-2xl border ${borderClass} p-4 sm:p-6 hover:border-emerald-300/50 hover:shadow-lg sm:hover:shadow-xl transition-all duration-300 group hover:scale-[1.02]`}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-r ${greenGradient} border ${greenBorderClass} group-hover:scale-110 transition-transform duration-300`}>
-                    <Package className={`w-4 h-4 sm:w-6 sm:h-6 ${greenTextClass}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className={`font-semibold ${textClass} group-hover:${greenTextClass} transition-colors duration-300 text-sm sm:text-base truncate`}>
-                      Milling Records
-                    </h3>
-                    <p className={`text-xs sm:text-sm ${textMutedClass} mt-0.5 sm:mt-1 line-clamp-2`}>Create batches & track milling</p>
-                  </div>
-                  <ChevronRight className={`w-4 h-4 sm:w-5 sm:h-5 ${textMutedClass} group-hover:${greenTextClass} group-hover:translate-x-0.5 sm:group-hover:translate-x-1 transition-all duration-300 flex-shrink-0`} />
-                </div>
-              </Link>
             </div>
           </div>
 
