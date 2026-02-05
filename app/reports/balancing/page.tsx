@@ -33,6 +33,7 @@ import {
   User,
   Tag,
   Download,
+  Copy,
 } from 'lucide-react';
 
 type Preset = 'daily' | 'weekly' | 'monthly' | 'custom';
@@ -40,7 +41,7 @@ type Preset = 'daily' | 'weekly' | 'monthly' | 'custom';
 type CoffeeRecord = {
   id: string;
   coffee_type: string;
-  date: string; // coffee_records.date (YYYY-MM-DD)
+  date: string; // YYYY-MM-DD
   kilograms: number;
   bags: number;
   supplier_name: string;
@@ -148,9 +149,58 @@ function envDebug() {
   };
 }
 
+/** Batch helpers
+ * DB format: BATCHYYYYMMDD001
+ * UI format: YYYYMMDD-001
+ * Matching supports: full, digits-only, and hyphenated.
+ */
+function batchDisplay(batch: string) {
+  const b = String(batch || '').trim();
+  if (!b) return '';
+  if (b.startsWith('BATCH') && b.length >= 16) {
+    const ymd = b.slice(5, 13);
+    const seq = b.slice(-3);
+    return `${ymd}-${seq}`;
+  }
+  if (/^\d{11}$/.test(b)) {
+    return `${b.slice(0, 8)}-${b.slice(8, 11)}`;
+  }
+  if (/^\d{8}-\d{3}$/.test(b)) return b;
+  return b;
+}
+
+function batchVariants(batch: string) {
+  const b = String(batch || '').trim();
+  if (!b) return [];
+  const out = new Set<string>();
+  out.add(b);
+
+  // BATCHYYYYMMDD001
+  if (b.startsWith('BATCH') && b.length >= 16) {
+    const digits = b.slice(5); // YYYYMMDD001
+    out.add(digits);
+    out.add(`${digits.slice(0, 8)}-${digits.slice(8)}`); // YYYYMMDD-001
+  }
+
+  // YYYYMMDD001
+  if (/^\d{11}$/.test(b)) {
+    out.add('BATCH' + b);
+    out.add(`${b.slice(0, 8)}-${b.slice(8)}`);
+  }
+
+  // YYYYMMDD-001
+  if (/^\d{8}-\d{3}$/.test(b)) {
+    const digits = b.replace('-', '');
+    out.add(digits);
+    out.add('BATCH' + digits);
+  }
+
+  return Array.from(out);
+}
+
 /**
  * IMPORTANT:
- * - Finance matching uses reference == coffee_records.id OR reference == batch_number
+ * - Finance matching uses reference == coffee_records.id OR reference == batch variants
  * - Update these transaction types to match your real values in finance_cash_transactions.transaction_type
  */
 const FINANCE_PURCHASE_TYPES = ['coffee_purchase', 'supplier_payment', 'purchase_payment'];
@@ -413,11 +463,18 @@ export default function BalancingReportPage() {
       }
 
       const ids = coffeeRows.map((r) => r.id).filter(Boolean);
-      const batches = Array.from(new Set(coffeeRows.map((r) => r.batch_number).filter(Boolean)));
+      const batchKeys = Array.from(
+        new Set(
+          coffeeRows
+            .flatMap((r) => batchVariants(r.batch_number))
+            .filter(Boolean)
+        )
+      );
 
-      // 2) Assessments (by store_record_id OR batch_number)
+      // 2) Assessments
       const assessmentOut: QualityAssessment[] = [];
 
+      // by store_record_id
       for (const chunk of chunkArray(ids, BATCH_SIZE)) {
         const aRes = await supabase
           .from('quality_assessments')
@@ -432,7 +489,8 @@ export default function BalancingReportPage() {
         assessmentOut.push(...((aRes.data || []) as QualityAssessment[]));
       }
 
-      for (const chunk of chunkArray(batches, BATCH_SIZE)) {
+      // by batch_number (supports variants)
+      for (const chunk of chunkArray(batchKeys, BATCH_SIZE)) {
         const aRes = await supabase
           .from('quality_assessments')
           .select('id, store_record_id, batch_number, status, date_assessed, assessed_by, final_price, suggested_price')
@@ -448,9 +506,10 @@ export default function BalancingReportPage() {
 
       setAssessments(uniqueById(assessmentOut));
 
-      // 3) Finance transactions (reference matches record id OR batch number)
+      // 3) Finance transactions (reference matches record id OR batch variants)
       const financeOut: FinanceTxn[] = [];
 
+      // by record id
       for (const chunk of chunkArray(ids, BATCH_SIZE)) {
         const fRes = await supabase
           .from('finance_cash_transactions')
@@ -466,7 +525,8 @@ export default function BalancingReportPage() {
         financeOut.push(...((fRes.data || []) as FinanceTxn[]));
       }
 
-      for (const chunk of chunkArray(batches, BATCH_SIZE)) {
+      // by batch variants
+      for (const chunk of chunkArray(batchKeys, BATCH_SIZE)) {
         const fRes = await supabase
           .from('finance_cash_transactions')
           .select('id, transaction_type, amount, balance_after, reference, status, created_at')
@@ -475,7 +535,7 @@ export default function BalancingReportPage() {
           .order('created_at', { ascending: false });
 
         if (fRes.error) {
-          pushError(classifySupabaseError('Loading finance_cash_transactions (by batch_number) failed', fRes.error));
+          pushError(classifySupabaseError('Loading finance_cash_transactions (by batch reference) failed', fRes.error));
           break;
         }
         financeOut.push(...((fRes.data || []) as FinanceTxn[]));
@@ -514,7 +574,9 @@ export default function BalancingReportPage() {
 
     for (const a of sorted) {
       if (a.store_record_id && !byStoreId.has(a.store_record_id)) byStoreId.set(a.store_record_id, a);
-      if (a.batch_number && !byBatch.has(a.batch_number)) byBatch.set(a.batch_number, a);
+
+      const keys = batchVariants(a.batch_number);
+      for (const k of keys) if (k && !byBatch.has(k)) byBatch.set(k, a);
     }
     return { byStoreId, byBatch };
   }, [assessments]);
@@ -522,18 +584,33 @@ export default function BalancingReportPage() {
   const financeByRef = useMemo(() => {
     const m = new Map<string, FinanceTxn[]>();
     for (const t of finance) {
-      const k = (t.reference || '').trim();
-      if (!k) continue;
-      if (!m.has(k)) m.set(k, []);
-      m.get(k)!.push(t);
+      const ref = String(t.reference || '').trim();
+      if (!ref) continue;
+
+      const keys = new Set<string>([ref, ...batchVariants(ref)]);
+      for (const k of keys) {
+        if (!m.has(k)) m.set(k, []);
+        m.get(k)!.push(t);
+      }
     }
     return m;
   }, [finance]);
 
   const flowRows: FlowRow[] = useMemo(() => {
     return coffee.map((r) => {
-      const assessment = assessmentMaps.byStoreId.get(r.id) || assessmentMaps.byBatch.get(r.batch_number) || null;
-      const txns = financeByRef.get(r.id) || financeByRef.get(r.batch_number) || [];
+      const assessment =
+        assessmentMaps.byStoreId.get(r.id) ||
+        assessmentMaps.byBatch.get(r.batch_number) ||
+        // also try variants
+        batchVariants(r.batch_number).map((k) => assessmentMaps.byBatch.get(k)).find(Boolean) ||
+        null;
+
+      const txns =
+        financeByRef.get(r.id) ||
+        financeByRef.get(r.batch_number) ||
+        batchVariants(r.batch_number).flatMap((k) => financeByRef.get(k) || []) ||
+        [];
+
       const paidTotal = txns.reduce((s, t) => s + Number(t.amount || 0), 0);
       const confirmedPaid = txns.filter((t) => t.status === 'confirmed').reduce((s, t) => s + Number(t.amount || 0), 0);
 
@@ -577,7 +654,8 @@ export default function BalancingReportPage() {
       if (statusFilter !== 'all' && row.record.status !== statusFilter) return false;
 
       if (q) {
-        const hay = `${row.record.batch_number} ${row.record.supplier_name} ${row.record.coffee_type} ${row.record.status}`.toLowerCase();
+        const batchShort = batchDisplay(row.record.batch_number);
+        const hay = `${row.record.batch_number} ${batchShort} ${row.record.supplier_name} ${row.record.coffee_type} ${row.record.status}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -634,7 +712,7 @@ export default function BalancingReportPage() {
     return parts.join(' - ');
   }, [fromDate, toDate, assessedFilter, financeFilter, balancedFilter, coffeeTypeFilter, statusFilter, searchText]);
 
-  // CSV Download Functionality
+  // CSV Download Functionality (includes batch short + full)
   const downloadCSV = () => {
     if (filteredRows.length === 0) {
       pushError({
@@ -652,7 +730,6 @@ export default function BalancingReportPage() {
     setDownloadingCSV(true);
 
     try {
-      // Prepare CSV headers
       const headers = [
         'Date',
         'Supplier Name',
@@ -660,7 +737,8 @@ export default function BalancingReportPage() {
         'Status',
         'Kilograms',
         'Bags',
-        'Batch Number',
+        'Batch (Short)',
+        'Batch (Full)',
         'Assessment Status',
         'Assessment Date',
         'Assessed By',
@@ -671,13 +749,13 @@ export default function BalancingReportPage() {
         'Confirmed Paid (UGX)',
         'Number of Payments',
         'Balance Status',
-        'Record ID'
+        'Record ID',
       ];
 
-      // Prepare CSV rows
-      const csvRows = filteredRows.map(row => {
+      const csvRows = filteredRows.map((row) => {
         const assessment = row.assessment;
-        
+        const batchShort = batchDisplay(row.record.batch_number);
+
         return [
           `"${row.record.date}"`,
           `"${row.record.supplier_name || ''}"`,
@@ -685,6 +763,7 @@ export default function BalancingReportPage() {
           `"${row.record.status || ''}"`,
           row.record.kilograms || 0,
           row.record.bags || 0,
+          `"${batchShort}"`,
           `"${row.record.batch_number || ''}"`,
           `"${assessment?.status || 'Missing'}"`,
           `"${assessment?.date_assessed || ''}"`,
@@ -696,20 +775,18 @@ export default function BalancingReportPage() {
           row.confirmedPaid,
           row.txns.length,
           `"${row.isBalanced ? 'Balanced' : 'Unbalanced'}"`,
-          `"${row.record.id}"`
+          `"${row.record.id}"`,
         ].join(',');
       });
 
-      // Combine headers and rows
       const csvContent = [headers.join(','), ...csvRows].join('\n');
 
-      // Create blob and download
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
       const filename = `balancing_report_${fromDate}_to_${toDate}_${timestamp}.csv`;
-      
+
       link.setAttribute('href', url);
       link.setAttribute('download', filename);
       link.style.visibility = 'hidden';
@@ -717,7 +794,6 @@ export default function BalancingReportPage() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-
     } catch (error) {
       pushError(classifySupabaseError('CSV export failed', error));
     } finally {
@@ -725,12 +801,10 @@ export default function BalancingReportPage() {
     }
   };
 
-  // Download Summary CSV
   const downloadSummaryCSV = () => {
     setDownloadingCSV(true);
 
     try {
-      // Prepare summary data
       const summaryData = [
         ['Balancing Report Summary', '', ''],
         ['Generated', generatedAtText, ''],
@@ -742,28 +816,30 @@ export default function BalancingReportPage() {
         ['Total Weight', `${fmt(sumKg)} kg`, `${fmt(sumBags)} bags`],
         ['Total Payments', fmtUGX(sumPaid), `Confirmed: ${fmtUGX(sumConfirmed)}`],
         ['Assessment Coverage', `${assessedCount} of ${filteredRows.length}`, pct(assessedCount, filteredRows.length)],
-        ['Finance Coverage', `${financeConfirmedCount + financePendingCount} of ${filteredRows.length}`, pct(financeConfirmedCount + financePendingCount, filteredRows.length)],
+        [
+          'Finance Coverage',
+          `${financeConfirmedCount + financePendingCount} of ${filteredRows.length}`,
+          pct(financeConfirmedCount + financePendingCount, filteredRows.length),
+        ],
         ['Missing Finance', financeMissingCount, pct(financeMissingCount, filteredRows.length)],
         ['Balanced Records', balancedCount, pct(balancedCount, filteredRows.length)],
         ['Unbalanced Records', unbalancedCount, pct(unbalancedCount, filteredRows.length)],
         ['Flow Health Score', `${flowHealth}%`, ''],
         ['', '', ''],
         ['Finance Types Used', FINANCE_PURCHASE_TYPES.join(', '), ''],
-        ['Matching Logic', 'Assessment by store_record_id or batch_number, Finance by reference', '']
+        ['Matching Logic', 'Assessment by store_record_id or batch_number variants, Finance by reference variants', ''],
       ];
 
-      // Convert to CSV
-      const csvContent = summaryData.map(row => 
-        row.map(cell => `"${cell}"`).join(',')
-      ).join('\n');
+      const csvContent = summaryData
+        .map((row) => row.map((cell) => `"${cell}"`).join(','))
+        .join('\n');
 
-      // Create blob and download
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
       const filename = `balancing_report_summary_${fromDate}_to_${toDate}_${timestamp}.csv`;
-      
+
       link.setAttribute('href', url);
       link.setAttribute('download', filename);
       link.style.visibility = 'hidden';
@@ -771,7 +847,6 @@ export default function BalancingReportPage() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-
     } catch (error) {
       pushError(classifySupabaseError('Summary CSV export failed', error));
     } finally {
@@ -850,17 +925,12 @@ export default function BalancingReportPage() {
                   onClick={downloadCSV}
                   disabled={downloadingCSV || loading || filteredRows.length === 0}
                   className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center gap-1"
-                  title={filteredRows.length === 0 ? "No data to export" : "Download CSV"}
+                  title={filteredRows.length === 0 ? 'No data to export' : 'Download CSV'}
                 >
-                  {downloadingCSV ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <Download className="w-5 h-5" />
-                  )}
+                  {downloadingCSV ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                 </button>
-                
-                {/* CSV Export Options Tooltip */}
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
+
+                <div className="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
                   <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Export Options</div>
                   <button
                     onClick={downloadCSV}
@@ -1133,8 +1203,8 @@ export default function BalancingReportPage() {
                   <div>
                     Matching: assessment by{' '}
                     <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">store_record_id</code> or{' '}
-                    <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">batch_number</code> • finance by{' '}
-                    <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">reference</code>
+                    <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">batch_number variants</code> • finance by{' '}
+                    <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">reference variants</code>
                   </div>
 
                   <SelectBox
@@ -1162,272 +1232,352 @@ export default function BalancingReportPage() {
             <p className="text-sm text-gray-600 dark:text-gray-400">Fetching and processing your data...</p>
           </div>
         ) : (
-          <>
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard
-                icon={<Layers className="w-5 h-5" />}
-                title="Total Records"
-                value={fmt(filteredRows.length)}
-                sub={`${fmt(sumKg)} kg • ${fmt(sumBags)} bags`}
-                trend="neutral"
-                gradient="from-blue-500 to-cyan-500"
-              />
-              <StatCard
-                icon={<BadgeCheck className="w-5 h-5" />}
-                title="Assessment Rate"
-                value={pct(assessedCount, filteredRows.length)}
-                sub={`${fmt(assessedCount)} assessed • ${fmt(notAssessedCount)} pending`}
-                trend={filteredRows.length ? (assessedCount / filteredRows.length > 0.8 ? 'up' : 'down') : 'neutral'}
-                gradient="from-emerald-500 to-green-500"
-              />
-              <StatCard
-                icon={<Banknote className="w-5 h-5" />}
-                title="Finance Coverage"
-                value={pct(financeConfirmedCount + financePendingCount, filteredRows.length)}
-                sub={`${fmt(financeConfirmedCount)} confirmed • ${fmt(financeMissingCount)} missing`}
-                trend={financeMissingCount === 0 ? 'up' : 'down'}
-                gradient="from-purple-500 to-violet-500"
-              />
-              <StatCard
-                icon={<TrendingUp className="w-5 h-5" />}
-                title="Flow Health"
-                value={`${flowHealth}%`}
-                sub={`${fmt(balancedCount)} balanced • ${fmt(unbalancedCount)} issues`}
-                trend={flowHealth > 80 ? 'up' : flowHealth < 60 ? 'down' : 'neutral'}
-                gradient="from-amber-500 to-orange-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <StatMiniCard
-                icon={<DollarSign className="w-4 h-4" />}
-                title="Total Payments"
-                value={fmtUGX(sumPaid)}
-                sub={`${fmtUGX(sumConfirmed)} confirmed`}
-                bgColor="bg-emerald-50 dark:bg-emerald-900/20"
-                iconColor="text-emerald-600 dark:text-emerald-300"
-              />
-              <StatMiniCard
-                icon={<Package className="w-4 h-4" />}
-                title="Average per Record"
-                value={`${fmt(Math.round(sumKg / (filteredRows.length || 1)) || 0)} kg`}
-                sub={`${fmt(Math.round(sumBags / (filteredRows.length || 1)) || 0)} bags avg`}
-                bgColor="bg-blue-50 dark:bg-blue-900/20"
-                iconColor="text-blue-600 dark:text-blue-300"
-              />
-              <StatMiniCard
-                icon={<Users className="w-4 h-4" />}
-                title="Suppliers Tracked"
-                value={fmt(new Set(filteredRows.map((r) => r.record.supplier_name)).size)}
-                sub={`${filteredRows.length} total records`}
-                bgColor="bg-purple-50 dark:bg-purple-900/20"
-                iconColor="text-purple-600 dark:text-purple-300"
-              />
-            </div>
-
-            {/* Table */}
-            <div className="glass-card rounded-2xl overflow-hidden shadow-lg">
-              <div className="p-5 border-b border-gray-200 dark:border-gray-800">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-gray-500" />
-                      Records Flow
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      {filtersSummaryText} • Showing {Math.min(totalRows, safePage * pageSize)} of {totalRows} records
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Generated: {generatedAtText || ''} • Last updated: {lastUpdatedText || ''}
-                    </p>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={downloadCSV}
-                      disabled={downloadingCSV || filteredRows.length === 0}
-                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {downloadingCSV ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Download className="w-4 h-4" />
-                      )}
-                      Export CSV ({filteredRows.length} records)
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr className="text-left">
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Date</th>
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Supplier</th>
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Coffee</th>
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Weight</th>
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Batch</th>
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Assessment</th>
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Finance</th>
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Paid</th>
-                      <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Balance</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {pagedRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="py-12 px-4 text-center">
-                          <div className="max-w-md mx-auto">
-                            <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl bg-gray-100 dark:bg-gray-800">
-                              <Search className="w-8 h-8 text-gray-400" />
-                            </div>
-                            <h4 className="text-lg font-semibold mb-2">No records found</h4>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                              No rows match your current filters. Try adjusting your search criteria.
-                            </p>
-                            <button
-                              onClick={() => {
-                                setSearchText('');
-                                setAssessedFilter('all');
-                                setFinanceFilter('all');
-                                setBalancedFilter('all');
-                                setCoffeeTypeFilter('all');
-                                setStatusFilter('all');
-                                setPage(1);
-                              }}
-                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-medium hover:opacity-90 transition-opacity"
-                            >
-                              Clear all filters
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      pagedRows.map((r, idx) => (
-                        <tr
-                          key={r.record.id}
-                          className={`border-t border-gray-100 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
-                            idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50/50 dark:bg-gray-900/50'
-                          }`}
-                        >
-                          <td className="py-4 px-4">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="w-3 h-3 text-gray-400" />
-                              <span className="font-medium">{r.record.date}</span>
-                            </div>
-                          </td>
-
-                          <td className="py-4 px-4">
-                            <div className="flex items-center gap-2">
-                              <User className="w-3 h-3 text-gray-400" />
-                              <span className="font-medium truncate max-w-[180px]">{r.record.supplier_name}</span>
-                            </div>
-                          </td>
-
-                          <td className="py-4 px-4">
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium">
-                              <Coffee className="w-3 h-3" />
-                              {r.record.coffee_type}
-                            </span>
-                          </td>
-
-                          <td className="py-4 px-4">
-                            <StatusBadge status={r.record.status} />
-                          </td>
-
-                          <td className="py-4 px-4">
-                            <div>
-                              <div className="font-semibold">{fmt(Number(r.record.kilograms || 0))} kg</div>
-                              <div className="text-xs text-gray-500">{fmt(Number(r.record.bags || 0))} bags</div>
-                            </div>
-                          </td>
-
-                          <td className="py-4 px-4">
-                            <code className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono text-xs">
-                              {r.record.batch_number}
-                            </code>
-                          </td>
-
-                          <td className="py-4 px-4">{AssessmentBadge(r.assessment)}</td>
-                          <td className="py-4 px-4">{FinanceBadge(r.financeState)}</td>
-
-                          <td className="py-4 px-4">
-                            <div className="font-semibold">{fmtUGX(r.paidTotal)}</div>
-                            {r.txns.length > 0 && <div className="text-xs text-gray-500">{r.txns.length} payment(s)</div>}
-                          </td>
-
-                          <td className="py-4 px-4">
-                            {r.isBalanced ? (
-                              <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
-                                <Check className="w-3 h-3" />
-                                Balanced
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-medium">
-                                <AlertTriangle className="w-3 h-3" />
-                                Unbalanced
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {pagedRows.length > 0 && (
-                <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
-                  <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      Showing <span className="font-semibold">{(safePage - 1) * pageSize + 1}</span> to{' '}
-                      <span className="font-semibold">{Math.min(safePage * pageSize, totalRows)}</span> of{' '}
-                      <span className="font-semibold">{totalRows}</span> records
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        disabled={safePage <= 1}
-                        className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        title="Previous page"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        Page <span className="font-semibold">{safePage}</span> of <span className="font-semibold">{totalPages}</span>
-                      </span>
-
-                      <button
-                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={safePage >= totalPages}
-                        className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        title="Next page"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="p-4 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
-                <div className="flex items-center justify-between">
-                  <div>Finance types used: {FINANCE_PURCHASE_TYPES.join(', ')}</div>
-                  <div className="text-right">Last updated: {lastUpdatedText || ''}</div>
-                </div>
-              </div>
-            </div>
-          </>
+          <ReportBody
+            filteredRows={filteredRows}
+            pagedRows={pagedRows}
+            totalRows={totalRows}
+            totalPages={totalPages}
+            safePage={safePage}
+            pageSize={pageSize}
+            page={page}
+            setPage={setPage}
+            generatedAtText={generatedAtText}
+            lastUpdatedText={lastUpdatedText}
+            filtersSummaryText={filtersSummaryText}
+            downloadingCSV={downloadingCSV}
+            downloadCSV={downloadCSV}
+            sumKg={sumKg}
+            sumBags={sumBags}
+            assessedCount={assessedCount}
+            notAssessedCount={notAssessedCount}
+            financeMissingCount={financeMissingCount}
+            financePendingCount={financePendingCount}
+            financeConfirmedCount={financeConfirmedCount}
+            flowHealth={flowHealth}
+            balancedCount={balancedCount}
+            unbalancedCount={unbalancedCount}
+            sumPaid={sumPaid}
+            sumConfirmed={sumConfirmed}
+          />
         )}
       </section>
     </main>
+  );
+}
+
+/* -------------------- Report Body -------------------- */
+
+function ReportBody(props: {
+  filteredRows: FlowRow[];
+  pagedRows: FlowRow[];
+  totalRows: number;
+  totalPages: number;
+  safePage: number;
+  pageSize: number;
+  page: number;
+  setPage: React.Dispatch<React.SetStateAction<number>>;
+  generatedAtText: string;
+  lastUpdatedText: string;
+  filtersSummaryText: string;
+  downloadingCSV: boolean;
+  downloadCSV: () => void;
+  sumKg: number;
+  sumBags: number;
+  assessedCount: number;
+  notAssessedCount: number;
+  financeMissingCount: number;
+  financePendingCount: number;
+  financeConfirmedCount: number;
+  flowHealth: number;
+  balancedCount: number;
+  unbalancedCount: number;
+  sumPaid: number;
+  sumConfirmed: number;
+}) {
+  const {
+    filteredRows,
+    pagedRows,
+    totalRows,
+    totalPages,
+    safePage,
+    pageSize,
+    setPage,
+    generatedAtText,
+    lastUpdatedText,
+    filtersSummaryText,
+    downloadingCSV,
+    downloadCSV,
+    sumKg,
+    sumBags,
+    assessedCount,
+    notAssessedCount,
+    financeMissingCount,
+    financePendingCount,
+    financeConfirmedCount,
+    flowHealth,
+    balancedCount,
+    unbalancedCount,
+    sumPaid,
+    sumConfirmed,
+  } = props;
+
+  return (
+    <>
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          icon={<Layers className="w-5 h-5" />}
+          title="Total Records"
+          value={fmt(filteredRows.length)}
+          sub={`${fmt(sumKg)} kg • ${fmt(sumBags)} bags`}
+          trend="neutral"
+          gradient="from-blue-500 to-cyan-500"
+        />
+        <StatCard
+          icon={<BadgeCheck className="w-5 h-5" />}
+          title="Assessment Rate"
+          value={pct(assessedCount, filteredRows.length)}
+          sub={`${fmt(assessedCount)} assessed • ${fmt(notAssessedCount)} pending`}
+          trend={filteredRows.length ? (assessedCount / filteredRows.length > 0.8 ? 'up' : 'down') : 'neutral'}
+          gradient="from-emerald-500 to-green-500"
+        />
+        <StatCard
+          icon={<Banknote className="w-5 h-5" />}
+          title="Finance Coverage"
+          value={pct(financeConfirmedCount + financePendingCount, filteredRows.length)}
+          sub={`${fmt(financeConfirmedCount)} confirmed • ${fmt(financeMissingCount)} missing`}
+          trend={financeMissingCount === 0 ? 'up' : 'down'}
+          gradient="from-purple-500 to-violet-500"
+        />
+        <StatCard
+          icon={<TrendingUp className="w-5 h-5" />}
+          title="Flow Health"
+          value={`${flowHealth}%`}
+          sub={`${fmt(balancedCount)} balanced • ${fmt(unbalancedCount)} issues`}
+          trend={flowHealth > 80 ? 'up' : flowHealth < 60 ? 'down' : 'neutral'}
+          gradient="from-amber-500 to-orange-500"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <StatMiniCard
+          icon={<DollarSign className="w-4 h-4" />}
+          title="Total Payments"
+          value={fmtUGX(sumPaid)}
+          sub={`${fmtUGX(sumConfirmed)} confirmed`}
+          bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+          iconColor="text-emerald-600 dark:text-emerald-300"
+        />
+        <StatMiniCard
+          icon={<Package className="w-4 h-4" />}
+          title="Average per Record"
+          value={`${fmt(Math.round(sumKg / (filteredRows.length || 1)) || 0)} kg`}
+          sub={`${fmt(Math.round(sumBags / (filteredRows.length || 1)) || 0)} bags avg`}
+          bgColor="bg-blue-50 dark:bg-blue-900/20"
+          iconColor="text-blue-600 dark:text-blue-300"
+        />
+        <StatMiniCard
+          icon={<Users className="w-4 h-4" />}
+          title="Suppliers Tracked"
+          value={fmt(new Set(filteredRows.map((r) => r.record.supplier_name)).size)}
+          sub={`${filteredRows.length} total records`}
+          bgColor="bg-purple-50 dark:bg-purple-900/20"
+          iconColor="text-purple-600 dark:text-purple-300"
+        />
+      </div>
+
+      {/* Table */}
+      <div className="glass-card rounded-2xl overflow-hidden shadow-lg">
+        <div className="p-5 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <FileText className="w-5 h-5 text-gray-500" />
+                Records Flow
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                {filtersSummaryText} • Showing {Math.min(totalRows, safePage * pageSize)} of {totalRows} records
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Generated: {generatedAtText || ''} • Last updated: {lastUpdatedText || ''}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={downloadCSV}
+                disabled={downloadingCSV || filteredRows.length === 0}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+              >
+                {downloadingCSV ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Export CSV ({filteredRows.length} records)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-gray-800">
+              <tr className="text-left">
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Date</th>
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Supplier</th>
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Coffee</th>
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Weight</th>
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Batch</th>
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Assessment</th>
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Finance</th>
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Paid</th>
+                <th className="py-4 px-4 font-semibold text-gray-700 dark:text-gray-300">Balance</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {pagedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-12 px-4 text-center">
+                    <div className="max-w-md mx-auto">
+                      <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl bg-gray-100 dark:bg-gray-800">
+                        <Search className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h4 className="text-lg font-semibold mb-2">No records found</h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        No rows match your current filters. Try adjusting your search criteria.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                pagedRows.map((r, idx) => (
+                  <tr
+                    key={r.record.id}
+                    className={`border-t border-gray-100 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                      idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50/50 dark:bg-gray-900/50'
+                    }`}
+                  >
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-3 h-3 text-gray-400" />
+                        <span className="font-medium">{r.record.date}</span>
+                      </div>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-2">
+                        <User className="w-3 h-3 text-gray-400" />
+                        <span className="font-medium truncate max-w-[180px]">{r.record.supplier_name}</span>
+                      </div>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium">
+                        <Coffee className="w-3 h-3" />
+                        {r.record.coffee_type}
+                      </span>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <StatusBadge status={r.record.status} />
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <div>
+                        <div className="font-semibold">{fmt(Number(r.record.kilograms || 0))} kg</div>
+                        <div className="text-xs text-gray-500">{fmt(Number(r.record.bags || 0))} bags</div>
+                      </div>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-2">
+                        <code className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono text-xs">
+                          {batchDisplay(r.record.batch_number)}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => navigator.clipboard.writeText(r.record.batch_number)}
+                          className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                          title="Copy full batch number"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Copy
+                        </button>
+                      </div>
+                    </td>
+
+                    <td className="py-4 px-4">{AssessmentBadge(r.assessment)}</td>
+                    <td className="py-4 px-4">{FinanceBadge(r.financeState)}</td>
+
+                    <td className="py-4 px-4">
+                      <div className="font-semibold">{fmtUGX(r.paidTotal)}</div>
+                      {r.txns.length > 0 && <div className="text-xs text-gray-500">{r.txns.length} payment(s)</div>}
+                    </td>
+
+                    <td className="py-4 px-4">
+                      {r.isBalanced ? (
+                        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                          <Check className="w-3 h-3" />
+                          Balanced
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-medium">
+                          <AlertTriangle className="w-3 h-3" />
+                          Unbalanced
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {pagedRows.length > 0 && (
+          <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Showing <span className="font-semibold">{(safePage - 1) * pageSize + 1}</span> to{' '}
+                <span className="font-semibold">{Math.min(safePage * pageSize, totalRows)}</span> of{' '}
+                <span className="font-semibold">{totalRows}</span> records
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Previous page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Page <span className="font-semibold">{safePage}</span> of <span className="font-semibold">{totalPages}</span>
+                </span>
+
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Next page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="p-4 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center justify-between">
+            <div>Finance types used: {FINANCE_PURCHASE_TYPES.join(', ')}</div>
+            <div className="text-right">Last updated: {lastUpdatedText || ''}</div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 

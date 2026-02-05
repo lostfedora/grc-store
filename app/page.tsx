@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import supabase from "@/lib/supabaseClient";
 import type { User } from "@supabase/supabase-js";
@@ -20,13 +20,11 @@ import {
   Phone,
   MapPin,
   X,
-  Home,
   UserPlus,
   PlusCircle,
   Filter,
   TrendingUp,
   Shield,
-  Box,
   CreditCard,
   FileText,
 } from "lucide-react";
@@ -64,23 +62,62 @@ type MillingCustomer = {
   current_balance: number;
 };
 
-const RATE_PER_KG = 150;
 type AlertMsg = { text: string; type: "success" | "error" } | null;
+
+const RATE_PER_KG = 150;
+
+function ymdCompact(dateYmd: string) {
+  // "2025-10-24" -> "20251024"
+  return (dateYmd || "").replaceAll("-", "");
+}
+function pad3(n: number) {
+  return String(n).padStart(3, "0");
+}
+
+/**
+ * Daily-reset numeric batch number:
+ * 20251024001, 20251024002, ...
+ * Uses coffee_records.date (YYYY-MM-DD)
+ * Requires batch_number stored as TEXT/VARCHAR.
+ * Recommended: UNIQUE(batch_number) in DB.
+ */
+async function generateDailyBatchNumber(dateYmd: string) {
+  const ymd = ymdCompact(dateYmd);
+  const { data, error } = await supabase
+    .from("coffee_records")
+    .select("batch_number")
+    .like("batch_number", `${ymd}%`)
+    .order("batch_number", { ascending: false })
+    .limit(1);
+
+  if (error) throw error;
+
+  const last = (data?.[0]?.batch_number as string | undefined) || "";
+  let nextSeq = 1;
+  if (last && last.length >= 11) {
+    const seq = Number(last.slice(8, 11));
+    if (!Number.isNaN(seq)) nextSeq = seq + 1;
+  }
+  return `${ymd}${pad3(nextSeq)}`;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
+
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
   const [logoutLoading, setLogoutLoading] = useState(false);
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("monthly");
   const [isDark, setIsDark] = useState(false);
 
-  /* Modal states */
   const [modalOpen, setModalOpen] = useState<null | "coffee" | "millingTx" | "millingCustomer">(null);
 
-  /* ---------------------------- Theme & Auth ---------------------------- */
+  /* ---------------------------- Theme ---------------------------- */
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     setIsDark(mediaQuery.matches);
@@ -89,9 +126,14 @@ export default function DashboardPage() {
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);
 
+  /* ---------------------------- Auth ---------------------------- */
   useEffect(() => {
+    let mounted = true;
+
     const checkAuth = async () => {
       const { data, error } = await supabase.auth.getUser();
+      if (!mounted) return;
+
       if (error || !data.user) {
         router.replace("/auth");
         return;
@@ -102,11 +144,17 @@ export default function DashboardPage() {
     };
 
     checkAuth();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT") router.replace("/auth");
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
@@ -119,17 +167,15 @@ export default function DashboardPage() {
       const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const { count: suppliersCount } = await supabase
-        .from("suppliers")
-        .select("*", { count: "exact", head: true });
+      const suppliersRes = await supabase.from("suppliers").select("*", { count: "exact", head: true });
+      const suppliersCount = suppliersRes.count ?? 0;
 
-      const { data: recordsData, count: totalRecordsCount } = await supabase
-        .from("coffee_records")
-        .select("kilograms,bags,date", { count: "exact" });
+      const recordsRes = await supabase.from("coffee_records").select("kilograms,bags,date", { count: "exact" });
+      const totalRecordsCount = recordsRes.count ?? (recordsRes.data?.length ?? 0);
+      const records = recordsRes.data || [];
 
-      const records = recordsData || [];
       const parseDate = (d: string | null | undefined) => (d ? new Date(d) : null);
-      const sumBags = (rows: any[]) => rows.reduce((sum, r) => sum + (r.bags || 0), 0);
+      const sumBags = (rows: any[]) => rows.reduce((sum, r) => sum + (Number(r.bags || 0) || 0), 0);
       const sumKilograms = (rows: any[]) => rows.reduce((sum, r) => sum + (Number(r.kilograms || 0) || 0), 0);
 
       const dailyRecordsArr = records.filter((r) => {
@@ -151,8 +197,8 @@ export default function DashboardPage() {
       const totalKilograms = sumKilograms(records);
 
       setStats({
-        totalSuppliers: suppliersCount || 0,
-        totalCoffeeRecords: totalRecordsCount || records.length,
+        totalSuppliers: suppliersCount,
+        totalCoffeeRecords: totalRecordsCount,
         totalBags,
         totalKilograms,
         dailyRecords: dailyRecordsArr.length,
@@ -203,8 +249,8 @@ export default function DashboardPage() {
   const greenTextClass = isDark ? "text-emerald-400" : "text-emerald-700";
   const greenBgClass = isDark ? "bg-emerald-900/30" : "bg-emerald-50/80";
   const greenBorderClass = isDark ? "border-emerald-800/50" : "border-emerald-200/60";
-  const greenGradient = isDark 
-    ? "from-emerald-900/30 via-emerald-900/20 to-transparent" 
+  const greenGradient = isDark
+    ? "from-emerald-900/30 via-emerald-900/20 to-transparent"
     : "from-emerald-50/80 via-emerald-50/60 to-transparent";
 
   /* ---------------------------- Shared Modal ---------------------------- */
@@ -219,7 +265,9 @@ export default function DashboardPage() {
   }) => (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 py-4 sm:py-0">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full max-w-full sm:max-w-2xl md:max-w-3xl ${cardBgClass} border ${borderClass} rounded-lg sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] sm:max-h-[85vh] overflow-y-auto`}>
+      <div
+        className={`relative w-full max-w-full sm:max-w-2xl md:max-w-3xl ${cardBgClass} border ${borderClass} rounded-lg sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] sm:max-h-[85vh] overflow-y-auto`}
+      >
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-green-500" />
         <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b ${borderClass} sticky top-0 ${cardBgClass}`}>
           <h3 className={`text-base sm:text-lg font-semibold ${textClass} truncate pr-2`}>{title}</h3>
@@ -244,21 +292,22 @@ export default function DashboardPage() {
     const [coffeeDate, setCoffeeDate] = useState(new Date().toISOString().slice(0, 10));
     const [kilograms, setKilograms] = useState("");
     const [bags, setBags] = useState("");
+
     const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
     const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
     const [supplierName, setSupplierName] = useState<string>("");
     const [supplierQuery, setSupplierQuery] = useState<string>("");
     const [showSupplierList, setShowSupplierList] = useState(false);
+
     const [loadingSuppliers, setLoadingSuppliers] = useState(true);
     const [coffeeSubmitting, setCoffeeSubmitting] = useState(false);
     const [coffeeMsg, setCoffeeMsg] = useState<AlertMsg>(null);
 
+    const [previewBatch, setPreviewBatch] = useState<string>("");
+
     const loadSuppliers = async () => {
       setLoadingSuppliers(true);
-      const { data, error } = await supabase
-        .from("suppliers")
-        .select("id, name, code, origin")
-        .order("name", { ascending: true });
+      const { data, error } = await supabase.from("suppliers").select("id, name, code, origin").order("name", { ascending: true });
       if (error) {
         console.error("Error loading suppliers:", error);
         setSuppliers([]);
@@ -272,23 +321,36 @@ export default function DashboardPage() {
       loadSuppliers();
     }, []);
 
+    // Batch preview whenever date changes (nice UX)
+    useEffect(() => {
+      let cancelled = false;
+      const run = async () => {
+        try {
+          const bn = await generateDailyBatchNumber(coffeeDate);
+          if (!cancelled) setPreviewBatch(bn);
+        } catch {
+          if (!cancelled) setPreviewBatch("");
+        }
+      };
+      run();
+      return () => {
+        cancelled = true;
+      };
+    }, [coffeeDate]);
+
     const filteredSuppliers = useMemo(() => {
       if (!supplierQuery.trim()) return suppliers.slice(0, 10);
       const term = supplierQuery.toLowerCase();
       return suppliers
-        .filter(
-          (s) =>
-            s.name.toLowerCase().includes(term) ||
-            s.code.toLowerCase().includes(term) ||
-            s.origin.toLowerCase().includes(term)
-        )
+        .filter((s) => s.name.toLowerCase().includes(term) || s.code.toLowerCase().includes(term) || s.origin.toLowerCase().includes(term))
         .slice(0, 10);
     }, [supplierQuery, suppliers]);
 
     const handleSupplierSelect = (supplier: SupplierOption) => {
       setSelectedSupplierId(supplier.id);
-      setSupplierName(`${supplier.name} (${supplier.code})`);
-      setSupplierQuery(`${supplier.name} (${supplier.code}) – ${supplier.origin}`);
+      const label = `${supplier.name} (${supplier.code})`;
+      setSupplierName(label);
+      setSupplierQuery(`${label} – ${supplier.origin}`);
       setShowSupplierList(false);
     };
 
@@ -325,44 +387,74 @@ export default function DashboardPage() {
 
       const kgNumber = Number(kilograms);
       const bagsNumber = Number(bags);
+
       const supplier = suppliers.find((s) => s.id === selectedSupplierId);
       const supplierNameValue = supplierName || (supplier ? `${supplier.name} (${supplier.code})` : "Unknown Supplier");
-      const timestamp = Date.now();
-      const id = `CR-${timestamp}`;
-      const autoBatchNumber = `BATCH-${coffeeDate}-${timestamp}`;
 
-      const { error } = await supabase.from("coffee_records").insert([
-        {
-          id,
-          coffee_type: coffeeType.trim(),
-          date: coffeeDate,
-          kilograms: kgNumber,
-          bags: bagsNumber,
-          supplier_id: selectedSupplierId,
-          supplier_name: supplierNameValue,
-          status: "pending",
-          batch_number: autoBatchNumber,
-          created_by: user?.email ?? null,
-        },
-      ]);
-
-      if (error) {
-        setCoffeeMsg({ text: `Failed to save coffee record: ${error.message}`, type: "error" });
-      } else {
-        setCoffeeMsg({ text: "Coffee record saved successfully.", type: "success" });
-        fetchDashboardStats();
-        setTimeout(() => {
-          setCoffeeType("");
-          setKilograms("");
-          setBags("");
-          setSelectedSupplierId("");
-          setSupplierName("");
-          setSupplierQuery("");
-          setShowSupplierList(false);
-          setModalOpen(null);
-        }, 1500);
+      // Generate numeric batch number: 20251024001 (no hyphens)
+      let batch_number = "";
+      try {
+        batch_number = await generateDailyBatchNumber(coffeeDate);
+      } catch (err: any) {
+        setCoffeeMsg({ text: `Failed to generate batch number: ${err?.message || "unknown error"}`, type: "error" });
+        setCoffeeSubmitting(false);
+        return;
       }
 
+      // Insert with retry on duplicate batch_number (if UNIQUE constraint exists)
+      const makePayload = () => ({
+        id: crypto.randomUUID(),
+        coffee_type: coffeeType.trim(),
+        date: coffeeDate,
+        kilograms: kgNumber,
+        bags: bagsNumber,
+        supplier_id: selectedSupplierId,
+        supplier_name: supplierNameValue,
+        status: "pending",
+        batch_number, // ✅ numeric daily-reset
+        created_by: user?.email ?? null,
+      });
+
+      let lastErr: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const payload = makePayload();
+        const { error } = await supabase.from("coffee_records").insert([payload]);
+
+        if (!error) {
+          setCoffeeMsg({ text: `Coffee record saved. Batch: ${batch_number}`, type: "success" });
+          fetchDashboardStats();
+          setTimeout(() => {
+            setCoffeeType("");
+            setKilograms("");
+            setBags("");
+            setSelectedSupplierId("");
+            setSupplierName("");
+            setSupplierQuery("");
+            setShowSupplierList(false);
+            setModalOpen(null);
+          }, 1200);
+          setCoffeeSubmitting(false);
+          return;
+        }
+
+        lastErr = error;
+        // If batch unique collision happens, regenerate and retry
+        const msg = String(error.message || "").toLowerCase();
+        const code = String((error as any).code || "").toLowerCase();
+
+        if (msg.includes("duplicate") || code === "23505") {
+          try {
+            batch_number = await generateDailyBatchNumber(coffeeDate);
+            continue;
+          } catch {
+            break;
+          }
+        } else {
+          break;
+        }
+      }
+
+      setCoffeeMsg({ text: `Failed to save coffee record: ${lastErr?.message || "Unknown error"}`, type: "error" });
       setCoffeeSubmitting(false);
     };
 
@@ -375,6 +467,7 @@ export default function DashboardPage() {
                 <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span className="text-xs sm:text-sm">Supplier *</span>
               </label>
+
               {loadingSuppliers ? (
                 <div className={`flex items-center gap-2 text-xs sm:text-sm ${textMutedClass} p-3 sm:p-4 rounded-lg border ${borderClass}`}>
                   <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
@@ -406,6 +499,7 @@ export default function DashboardPage() {
                     placeholder="Type supplier name, code, or origin..."
                     className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border ${borderClass} ${cardBgClass} ${textClass} placeholder:${textMutedClass} focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm`}
                   />
+
                   {showSupplierList && filteredSuppliers.length > 0 && (
                     <div className={`absolute mt-1 sm:mt-2 w-full rounded-lg sm:rounded-xl border ${borderClass} ${cardBgClass} shadow-2xl z-20 max-h-48 sm:max-h-60 overflow-y-auto`}>
                       {filteredSuppliers.map((s) => (
@@ -416,7 +510,9 @@ export default function DashboardPage() {
                           className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 border-b last:border-b-0 ${borderClass} ${hoverClass} transition-colors text-sm`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className={`font-medium ${textClass} truncate`}>{s.name} ({s.code})</span>
+                            <span className={`font-medium ${textClass} truncate`}>
+                              {s.name} ({s.code})
+                            </span>
                             <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full ${greenBgClass} ${greenTextClass} ml-2 flex-shrink-0`}>
                               {s.origin}
                             </span>
@@ -425,6 +521,7 @@ export default function DashboardPage() {
                       ))}
                     </div>
                   )}
+
                   {selectedSupplierId && (
                     <p className={`mt-1.5 sm:mt-2 text-[10px] sm:text-xs ${greenTextClass} flex items-center gap-1`}>
                       <Shield className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
@@ -447,6 +544,12 @@ export default function DashboardPage() {
                 className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border ${borderClass} ${cardBgClass} ${textClass} focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm`}
                 required
               />
+              <p className={`mt-2 text-[10px] sm:text-xs ${textMutedClass} flex items-center gap-2`}>
+                <FileText className="w-3 h-3" />
+                Batch preview:{" "}
+                <span className={`${greenTextClass} font-semibold`}>{previewBatch || "…"}</span>
+                <span className="opacity-70">(format: YYYYMMDDNNN)</span>
+              </p>
             </div>
           </div>
 
@@ -520,10 +623,7 @@ export default function DashboardPage() {
         )}
 
         <div className={`flex flex-col xs:flex-row xs:items-center justify-between gap-3 sm:gap-4 pt-4 sm:pt-6 border-t ${borderClass}`}>
-          <Link
-            href="/coffee-records"
-            className={`text-xs sm:text-sm ${greenTextClass} hover:underline flex items-center gap-1.5 sm:gap-2 order-2 xs:order-1`}
-          >
+          <Link href="/coffee-records" className={`text-xs sm:text-sm ${greenTextClass} hover:underline flex items-center gap-1.5 sm:gap-2 order-2 xs:order-1`}>
             View all records
             <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </Link>
@@ -532,11 +632,7 @@ export default function DashboardPage() {
             disabled={coffeeSubmitting || loadingSuppliers || suppliers.length === 0}
             className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-medium disabled:opacity-50 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] w-full xs:w-auto order-1 xs:order-2"
           >
-            {coffeeSubmitting ? (
-              <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 sm:w-5 sm:h-5" />
-            )}
+            {coffeeSubmitting ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Save className="w-4 h-4 sm:w-5 sm:h-5" />}
             <span className="text-sm sm:text-base">{coffeeSubmitting ? "Saving..." : "Save Coffee Record"}</span>
           </button>
         </div>
@@ -554,12 +650,14 @@ export default function DashboardPage() {
     const [amountPaid, setAmountPaid] = useState<string>("0");
     const [balance, setBalance] = useState<number>(0);
     const [notes, setNotes] = useState<string>("");
+
     const [customers, setCustomers] = useState<MillingCustomer[]>([]);
     const [customerQuery, setCustomerQuery] = useState<string>("");
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
     const [selectedCustomerLabel, setSelectedCustomerLabel] = useState<string>("");
     const [showCustomerList, setShowCustomerList] = useState(false);
     const [loadingCustomers, setLoadingCustomers] = useState(true);
+
     const [mTxSubmitting, setMTxSubmitting] = useState(false);
     const [mTxMsg, setMTxMsg] = useState<AlertMsg>(null);
 
@@ -675,7 +773,7 @@ export default function DashboardPage() {
           setCustomerQuery("");
           setShowCustomerList(false);
           setModalOpen(null);
-        }, 1500);
+        }, 1200);
       }
 
       setMTxSubmitting(false);
@@ -690,6 +788,7 @@ export default function DashboardPage() {
                 <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span className="text-xs sm:text-sm">Customer *</span>
               </label>
+
               {loadingCustomers ? (
                 <div className={`flex items-center gap-2 text-xs sm:text-sm ${textMutedClass} p-3 sm:p-4 rounded-lg sm:rounded-xl border ${borderClass}`}>
                   <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
@@ -721,6 +820,7 @@ export default function DashboardPage() {
                     placeholder="Type customer name, phone, or address..."
                     className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border ${borderClass} ${cardBgClass} ${textClass} placeholder:${textMutedClass} focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm`}
                   />
+
                   {showCustomerList && filteredCustomers.length > 0 && (
                     <div className={`absolute mt-1 sm:mt-2 w-full rounded-lg sm:rounded-xl border ${borderClass} ${cardBgClass} shadow-2xl z-20 max-h-48 sm:max-h-60 overflow-y-auto`}>
                       {filteredCustomers.map((c) => (
@@ -737,7 +837,13 @@ export default function DashboardPage() {
                                 {c.phone || "No phone"} • {c.address || "No address"}
                               </p>
                             </div>
-                            <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full ${balance > 0 ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"} flex-shrink-0`}>
+                            <span
+                              className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full ${
+                                c.current_balance > 0
+                                  ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                                  : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                              } flex-shrink-0`}
+                            >
                               Bal: {c.current_balance.toLocaleString()} UGX
                             </span>
                           </div>
@@ -745,6 +851,7 @@ export default function DashboardPage() {
                       ))}
                     </div>
                   )}
+
                   {selectedCustomerId && (
                     <p className={`mt-1.5 sm:mt-2 text-[10px] sm:text-xs ${isDark ? "text-emerald-300" : "text-emerald-700"} flex items-center gap-1`}>
                       <Shield className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
@@ -826,10 +933,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className={`p-3 sm:p-4 rounded-lg sm:rounded-xl border ${balance > 0 ? "border-amber-300/50 dark:border-amber-500/50" : "border-emerald-300/50 dark:border-emerald-500/50"} ${cardBgClass} transition-all hover:scale-[1.02]`}>
-            <p className={`text-[10px] sm:text-xs ${balance > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"} mb-1`}>
-              Balance
-            </p>
+          <div
+            className={`p-3 sm:p-4 rounded-lg sm:rounded-xl border ${
+              balance > 0 ? "border-amber-300/50 dark:border-amber-500/50" : "border-emerald-300/50 dark:border-emerald-500/50"
+            } ${cardBgClass} transition-all hover:scale-[1.02]`}
+          >
+            <p className={`text-[10px] sm:text-xs ${balance > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"} mb-1`}>Balance</p>
             <div className="flex items-center gap-2">
               <TrendingUp className={`w-4 h-4 sm:w-5 sm:h-5 ${balance > 0 ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"}`} />
               <span className={`text-base sm:text-xl font-bold ${balance > 0 ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"} truncate`}>
@@ -862,21 +971,14 @@ export default function DashboardPage() {
             } transition-all duration-300`}
           >
             <p className="text-xs sm:text-sm font-medium flex items-center gap-2">
-              {mTxMsg.type === "success" ? (
-                <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              ) : (
-                <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              )}
+              {mTxMsg.type === "success" ? <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
               {mTxMsg.text}
             </p>
           </div>
         )}
 
         <div className={`flex flex-col xs:flex-row xs:items-center justify-between gap-3 sm:gap-4 pt-4 sm:pt-6 border-t ${borderClass}`}>
-          <Link
-            href="/milling-transactions"
-            className={`text-xs sm:text-sm ${greenTextClass} hover:underline flex items-center gap-1.5 sm:gap-2 order-2 xs:order-1`}
-          >
+          <Link href="/milling-transactions" className={`text-xs sm:text-sm ${greenTextClass} hover:underline flex items-center gap-1.5 sm:gap-2 order-2 xs:order-1`}>
             View all transactions
             <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </Link>
@@ -885,11 +987,7 @@ export default function DashboardPage() {
             disabled={mTxSubmitting || loadingCustomers || customers.length === 0}
             className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-medium disabled:opacity-50 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] w-full xs:w-auto order-1 xs:order-2"
           >
-            {mTxSubmitting ? (
-              <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 sm:w-5 sm:h-5" />
-            )}
+            {mTxSubmitting ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Save className="w-4 h-4 sm:w-5 sm:h-5" />}
             <span className="text-sm sm:text-base">{mTxSubmitting ? "Saving..." : "Save Milling Transaction"}</span>
           </button>
         </div>
@@ -919,7 +1017,6 @@ export default function DashboardPage() {
       }
 
       const opening = 0;
-      const status = "Active";
 
       const { error } = await supabase.from("milling_customers").insert([
         {
@@ -928,7 +1025,7 @@ export default function DashboardPage() {
           address: address.trim() || null,
           opening_balance: opening,
           current_balance: opening,
-          status,
+          status: "Active",
         },
       ]);
 
@@ -941,7 +1038,7 @@ export default function DashboardPage() {
           setPhone("");
           setAddress("");
           setModalOpen(null);
-        }, 1500);
+        }, 1200);
       }
 
       setMCustSubmitting(false);
@@ -1013,21 +1110,14 @@ export default function DashboardPage() {
             } transition-all duration-300`}
           >
             <p className="text-xs sm:text-sm font-medium flex items-center gap-2">
-              {mCustMsg.type === "success" ? (
-                <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              ) : (
-                <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              )}
+              {mCustMsg.type === "success" ? <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
               {mCustMsg.text}
             </p>
           </div>
         )}
 
         <div className={`flex flex-col xs:flex-row xs:items-center justify-between gap-3 sm:gap-4 pt-4 sm:pt-6 border-t ${borderClass}`}>
-          <Link
-            href="/milling-customers"
-            className={`text-xs sm:text-sm ${greenTextClass} hover:underline flex items-center gap-1.5 sm:gap-2 order-2 xs:order-1`}
-          >
+          <Link href="/milling-customers" className={`text-xs sm:text-sm ${greenTextClass} hover:underline flex items-center gap-1.5 sm:gap-2 order-2 xs:order-1`}>
             View all customers
             <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </Link>
@@ -1036,11 +1126,7 @@ export default function DashboardPage() {
             disabled={mCustSubmitting}
             className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-medium disabled:opacity-50 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] w-full xs:w-auto order-1 xs:order-2"
           >
-            {mCustSubmitting ? (
-              <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-            ) : (
-              <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" />
-            )}
+            {mCustSubmitting ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" />}
             <span className="text-sm sm:text-base">{mCustSubmitting ? "Saving..." : "Save Milling Customer"}</span>
           </button>
         </div>
@@ -1054,7 +1140,7 @@ export default function DashboardPage() {
       <main className={`min-h-screen flex items-center justify-center ${bgClass} transition-colors duration-200 px-4`}>
         <div className="text-center space-y-4">
           <div className="relative">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-4 border-emerald-200 dark:border-emerald-800 border-t-emerald-600 dark:border-t-emerald-400 animate-spin mx-auto"></div>
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-4 border-emerald-200 dark:border-emerald-800 border-t-emerald-600 dark:border-t-emerald-400 animate-spin mx-auto" />
             <Coffee className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-600 dark:text-emerald-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
           </div>
           <p className={`text-xs sm:text-sm ${textMutedClass}`}>Loading your dashboard...</p>
@@ -1093,7 +1179,7 @@ export default function DashboardPage() {
             <Icon className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className={`font-semibold ${textClass} group-hover:${greenTextClass} transition-colors duration-300 text-sm sm:text-base truncate`}>
+            <h3 className={`font-semibold ${textClass} transition-colors duration-300 text-sm sm:text-base truncate`}>
               {label}
             </h3>
             <p className={`text-xs sm:text-sm ${textMutedClass} mt-0.5 sm:mt-1 line-clamp-2`}>{description}</p>
@@ -1106,7 +1192,7 @@ export default function DashboardPage() {
 
   return (
     <main className={`min-h-screen ${bgClass} transition-colors duration-200`}>
-      {/* Header - Simplified */}
+      {/* Header */}
       <header className={`${cardBgClass} border-b ${borderClass} px-3 sm:px-4 py-3 sm:py-4 sticky top-0 z-10 backdrop-blur-md transition-colors duration-200`}>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between gap-3">
@@ -1114,7 +1200,6 @@ export default function DashboardPage() {
               <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-gradient-to-r ${greenGradient} border ${greenBorderClass} flex-shrink-0`}>
                 <Coffee className={`w-5 h-5 sm:w-6 sm:h-6 ${greenTextClass}`} />
               </div>
-              
               <div className="min-w-0">
                 <h1 className={`text-lg sm:text-2xl font-bold ${greenTextClass} truncate`}>Great Pearl Coffee</h1>
                 <p className={`text-xs sm:text-sm ${textMutedClass} truncate`}>
@@ -1123,20 +1208,14 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleLogout}
-                disabled={logoutLoading}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm ${textMutedClass} ${hoverClass} rounded-lg transition-all border ${borderClass} hover:scale-[1.02]`}
-              >
-                {logoutLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
-                ) : (
-                  <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                )}
-                <span className="hidden sm:inline">{logoutLoading ? "..." : "Logout"}</span>
-              </button>
-            </div>
+            <button
+              onClick={handleLogout}
+              disabled={logoutLoading}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm ${textMutedClass} ${hoverClass} rounded-lg transition-all border ${borderClass} hover:scale-[1.02]`}
+            >
+              {logoutLoading ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+              <span className="hidden sm:inline">{logoutLoading ? "..." : "Logout"}</span>
+            </button>
           </div>
         </div>
       </header>
@@ -1151,27 +1230,9 @@ export default function DashboardPage() {
               Quick Actions
             </h2>
             <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
-              <ActionButton
-                onClick={() => setModalOpen("coffee")}
-                label="Add Coffee Record"
-                icon={Coffee}
-                description="Record new coffee deliveries from suppliers"
-                color="emerald"
-              />
-              <ActionButton
-                onClick={() => setModalOpen("millingTx")}
-                label="Add Milling Transaction"
-                icon={ClipboardList}
-                description="Record milling services for customers"
-                color="green"
-              />
-              <ActionButton
-                onClick={() => setModalOpen("millingCustomer")}
-                label="Add Milling Customer"
-                icon={UserPlus}
-                description="Add new milling customers to your system"
-                color="teal"
-              />
+              <ActionButton onClick={() => setModalOpen("coffee")} label="Add Coffee Record" icon={Coffee} description="Record new coffee deliveries from suppliers" color="emerald" />
+              <ActionButton onClick={() => setModalOpen("millingTx")} label="Add Milling Transaction" icon={ClipboardList} description="Record milling services for customers" color="green" />
+              <ActionButton onClick={() => setModalOpen("millingCustomer")} label="Add Milling Customer" icon={UserPlus} description="Add new milling customers to your system" color="teal" />
             </div>
           </div>
 
@@ -1190,9 +1251,7 @@ export default function DashboardPage() {
                     key={k}
                     onClick={() => setTimeFilter(k)}
                     className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-md sm:rounded-lg transition-all duration-200 ${
-                      timeFilter === k
-                        ? `${cardBgClass} ${textClass} shadow-sm scale-[1.02]`
-                        : `${textMutedClass} hover:${textClass} hover:scale-[1.02]`
+                      timeFilter === k ? `${cardBgClass} ${textClass} shadow-sm scale-[1.02]` : `${textMutedClass} hover:${textClass} hover:scale-[1.02]`
                     }`}
                     type="button"
                   >
@@ -1213,7 +1272,7 @@ export default function DashboardPage() {
                   { label: "Total Suppliers", value: stats?.totalSuppliers || 0, icon: Users },
                   { label: "Total Records", value: stats?.totalCoffeeRecords || 0, icon: Coffee },
                   { label: timeLabel, value: filteredStats.records, icon: Calendar, subtext: `${filteredStats.bags} bags` },
-                  { label: `${timeLabel} Kgs`, value: filteredStats.kilograms.toLocaleString(), icon: BarChart3 },
+                  { label: `${timeLabel} Kgs`, value: Number(filteredStats.kilograms || 0).toLocaleString(), icon: BarChart3 },
                 ].map((stat, idx) => (
                   <div
                     key={idx}
@@ -1225,9 +1284,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="text-right min-w-0">
                         <p className={`text-xl sm:text-3xl font-bold ${greenTextClass} truncate`}>{stat.value}</p>
-                        {stat.subtext && (
-                          <p className={`text-[10px] sm:text-xs ${textMutedClass} mt-0.5 sm:mt-1 truncate`}>{stat.subtext}</p>
-                        )}
+                        {stat.subtext && <p className={`text-[10px] sm:text-xs ${textMutedClass} mt-0.5 sm:mt-1 truncate`}>{stat.subtext}</p>}
                       </div>
                     </div>
                     <h3 className={`text-xs sm:text-sm font-medium ${textClass} truncate`}>{stat.label}</h3>
