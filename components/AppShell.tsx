@@ -16,16 +16,29 @@ import {
   User,
   UserCheck,
   FileText,
+  BarChart3,
+  Truck,
+  Package,
+  TrendingUp,
+  ClipboardList,
 } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", href: "/", icon: Home },
   { label: "Suppliers", href: "/suppliers", icon: Users },
   { label: "Coffee Records", href: "/coffee-records", icon: Coffee },
+  { label: "Coffee Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Milling", href: "/milling", icon: Scale },
   { label: "Milling Customers", href: "/milling-customers", icon: UserCheck },
   { label: "Reports", href: "/reports/balancing", icon: FileText },
+];
 
+// Secondary navigation items (can be in a dropdown or separate section)
+const secondaryNavItems = [
+  { label: "Deliveries", href: "/coffee-records", icon: Truck },
+  { label: "Inventory", href: "/inventory", icon: Package },
+  { label: "Performance", href: "/analytics", icon: TrendingUp },
+  { label: "Audit Logs", href: "/audit-logs", icon: ClipboardList },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -48,7 +61,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const toggleDrawer = () => setOpen((prev) => !prev);
   const closeDrawer = () => setOpen(false);
 
-  // Mock user data
+  // Mock user data - replace with actual auth data
   const user = {
     name: "Admin User",
     email: "admin@greatpearlcoffee.com",
@@ -70,8 +83,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
+      // Clear all auth data
       localStorage.removeItem("auth-token");
       sessionStorage.removeItem("user-session");
+      
+      // Optional: Clear Supabase session if using Supabase auth
+      // await supabase.auth.signOut();
       
       await new Promise((resolve) => setTimeout(resolve, 1000));
       
@@ -96,6 +113,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (window.confirm("Are you sure you want to log out?")) {
       handleLogout();
     }
+  };
+
+  // Helper function to check if a nav item is active (supports sub-routes)
+  const isActive = (href: string) => {
+    if (href === "/") {
+      return pathname === href;
+    }
+    return pathname.startsWith(href);
   };
 
   return (
@@ -169,11 +194,52 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-3 space-y-1">
+        {/* Main Navigation */}
+        <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const active = isActive(item.href);
+
+            return (
+              <button
+                key={item.href}
+                onClick={() => handleNavigation(item.href)}
+                className={`
+                  flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                  transition-colors w-full text-left
+                  ${
+                    active
+                      ? "bg-emerald-600 text-white"
+                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }
+                `}
+              >
+                <Icon
+                  className={`w-4 h-4 ${
+                    active
+                      ? "text-white"
+                      : "text-slate-500 dark:text-slate-400"
+                  }`}
+                />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+
+          {/* Divider for secondary section */}
+          <div className="my-4 border-t border-slate-200 dark:border-slate-800" />
+          
+          {/* Section Title */}
+          <div className="px-3 py-1">
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Quick Links
+            </p>
+          </div>
+
+          {/* Secondary Navigation Items */}
+          {secondaryNavItems.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.href);
 
             return (
               <button
