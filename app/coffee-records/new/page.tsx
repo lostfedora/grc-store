@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import supabase from "@/lib/supabaseClient";
 import type { User } from "@supabase/supabase-js";
-import { ArrowLeft, Coffee, Save, Loader2, Users, Scale, Package, Calendar, Hash, AlertCircle, CheckCircle, XCircle } from "lucide-react";
+import { ArrowLeft, Coffee, Save, Loader2, Users, Scale, Package, Calendar, Hash, AlertCircle, CheckCircle, XCircle, Info } from "lucide-react";
 import Link from "next/link";
 
 type SupplierOption = {
@@ -17,6 +17,7 @@ type SupplierOption = {
 type AlertMsg = { text: string; type: "success" | "error" } | null;
 
 // Auto-correction function for swapped kgs and bags
+// Rule: kgs should be >= bags (except 1:1 ratio)
 const fixKgsAndBags = (totalKgs: number, bags: number) => {
   if (!totalKgs || !bags || totalKgs <= 0 || bags <= 0) {
     return {
@@ -27,15 +28,17 @@ const fixKgsAndBags = (totalKgs: number, bags: number) => {
     };
   }
 
-  const kgPerBag = totalKgs / bags;
-  const SHOULD_SWAP = kgPerBag < 20 || kgPerBag > 250;
-
-  if (SHOULD_SWAP) {
+  // Rule: kgs should be >= bags (except 1:1 ratio)
+  const isValidRatio = totalKgs >= bags;
+  const isOneToOne = totalKgs === 1 && bags === 1;
+  
+  if (!isValidRatio && !isOneToOne) {
+    // Swap them - user likely entered kgs in bags field and vice versa
     return {
       totalKgs: bags,
       bags: totalKgs,
       corrected: true,
-      message: "KGs and bags were automatically corrected because they looked swapped.",
+      message: "KGs and bags were automatically corrected because kgs should be greater than or equal to bags.",
     };
   }
 
@@ -73,6 +76,7 @@ export default function NewCoffeeRecordPage() {
   const [suggestedKgs, setSuggestedKgs] = useState(0);
   const [suggestedBags, setSuggestedBags] = useState(0);
   const [kgPerBag, setKgPerBag] = useState<number | null>(null);
+  const [isValidRatio, setIsValidRatio] = useState(true);
 
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
   const [batchLoading, setBatchLoading] = useState(true);
@@ -112,17 +116,29 @@ export default function NewCoffeeRecordPage() {
       const kgPerBagValue = kgs / bagsNum;
       setKgPerBag(kgPerBagValue);
       
-      const fixed = fixKgsAndBags(kgs, bagsNum);
-      if (fixed.corrected) {
-        setShowSwapWarning(true);
-        setSuggestedKgs(fixed.totalKgs);
-        setSuggestedBags(fixed.bags);
-      } else {
-        setShowSwapWarning(false);
+      // Rule: kgs should be >= bags (except when both are 1)
+      const validRatio = kgs >= bagsNum;
+      const isOneToOne = kgs === 1 && bagsNum === 1;
+      const valid = validRatio || isOneToOne;
+      
+      setIsValidRatio(valid);
+      
+      if (!valid) {
+        // This looks swapped (e.g., 10 kgs for 50 bags)
+        const fixed = fixKgsAndBags(kgs, bagsNum);
+        if (fixed.corrected) {
+          setShowSwapWarning(true);
+          setSuggestedKgs(fixed.totalKgs);
+          setSuggestedBags(fixed.bags);
+          return;
+        }
       }
+      
+      setShowSwapWarning(false);
     } else {
       setShowSwapWarning(false);
       setKgPerBag(null);
+      setIsValidRatio(true);
     }
   }, [kilograms, bags]);
 
@@ -283,6 +299,19 @@ export default function NewCoffeeRecordPage() {
       return;
     }
 
+    // Validate: kgs should be >= bags (except 1:1)
+    const isValidRatio = kgNumber >= bagsNumber;
+    const isOneToOne = kgNumber === 1 && bagsNumber === 1;
+
+    if (!isValidRatio && !isOneToOne) {
+      setMessage({ 
+        text: `Invalid: ${kgNumber} kgs cannot fit into ${bagsNumber} bags. Each bag would need to hold ${(kgNumber / bagsNumber).toFixed(1)} kg, which is not realistic. Did you swap kgs and bags?`, 
+        type: "error" 
+      });
+      setSubmitting(false);
+      return;
+    }
+
     // Apply auto-correction for swapped values
     const fixed = fixKgsAndBags(kgNumber, bagsNumber);
     
@@ -298,6 +327,14 @@ export default function NewCoffeeRecordPage() {
       
       kgNumber = fixed.totalKgs;
       bagsNumber = fixed.bags;
+      
+      // Validate again after correction
+      const isValidAfterFix = kgNumber >= bagsNumber || (kgNumber === 1 && bagsNumber === 1);
+      if (!isValidAfterFix) {
+        setMessage({ text: "Even after correction, values are invalid. Please check manually.", type: "error" });
+        setSubmitting(false);
+        return;
+      }
     }
 
     const supplier = suppliers.find((s) => s.id === selectedSupplierId);
@@ -570,7 +607,11 @@ export default function NewCoffeeRecordPage() {
                       step="0.01"
                       value={kilograms}
                       onChange={(e) => setKilograms(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
+                      className={`w-full pl-10 pr-4 py-2.5 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
+                        !isValidRatio && kilograms && bags && !(Number(kilograms) === 1 && Number(bags) === 1)
+                          ? "border-red-500 dark:border-red-500"
+                          : "border-gray-300 dark:border-slate-600"
+                      }`}
                       placeholder="e.g., 1200"
                       required
                     />
@@ -590,7 +631,11 @@ export default function NewCoffeeRecordPage() {
                       step="1"
                       value={bags}
                       onChange={(e) => setBags(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
+                      className={`w-full pl-10 pr-4 py-2.5 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
+                        !isValidRatio && kilograms && bags && !(Number(kilograms) === 1 && Number(bags) === 1)
+                          ? "border-red-500 dark:border-red-500"
+                          : "border-gray-300 dark:border-slate-600"
+                      }`}
                       placeholder="e.g., 20"
                       required
                     />
@@ -601,23 +646,40 @@ export default function NewCoffeeRecordPage() {
               {/* Real-time validation warnings */}
               {kgPerBag !== null && (
                 <div className={`text-xs p-3 rounded-lg transition-colors ${
-                  kgPerBag >= 70 && kgPerBag <= 140
+                  isValidRatio
                     ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
-                    : "bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300"
+                    : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300"
                 }`}>
                   <div className="flex items-center gap-2">
-                    {kgPerBag >= 70 && kgPerBag <= 140 ? (
+                    {isValidRatio ? (
                       <CheckCircle className="w-4 h-4" />
                     ) : (
-                      <AlertCircle className="w-4 h-4" />
+                      <XCircle className="w-4 h-4" />
                     )}
-                    <span>
-                      {kgPerBag.toFixed(1)} kg per bag 
-                      {kgPerBag >= 70 && kgPerBag <= 140 
-                        ? " ✓ (within normal range)" 
-                        : " ⚠️ (unusual - typical range is 70-140 kg per bag)"}
+                    <span className="font-medium">
+                      {kgPerBag.toFixed(1)} kg per bag
                     </span>
                   </div>
+                  
+                  {isValidRatio ? (
+                    <div className="mt-1">
+                      {Number(kilograms) === 1 && Number(bags) === 1 ? (
+                        <p>✓ Valid: Small sample delivery (1kg in 1 bag)</p>
+                      ) : (
+                        <p>✓ Valid: {Number(kilograms)} kgs in {Number(bags)} bags</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-1 space-y-1">
+                      <p>❌ Invalid: {Number(kilograms)} kgs cannot fit into {Number(bags)} bags</p>
+                      <p className="text-xs opacity-90">
+                        Rule: Kilograms must be ≥ number of bags (except 1kg = 1 bag)
+                      </p>
+                      <p className="text-xs opacity-90">
+                        Example: {Number(bags)} bags would need at least {Number(bags)} kgs
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -628,10 +690,11 @@ export default function NewCoffeeRecordPage() {
                     <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">
-                        ⚠️ Unusual values detected
+                        ⚠️ Invalid values detected
                       </p>
                       <p className="text-sm text-yellow-700 dark:text-yellow-400 mb-3">
-                        {kilograms} kgs for {bags} bags is unusual. Did you swap kilograms and bags?
+                        {kilograms} kgs for {bags} bags is invalid because kgs should be ≥ bags.
+                        Did you swap kilograms and bags?
                       </p>
                       <button
                         type="button"
@@ -664,7 +727,7 @@ export default function NewCoffeeRecordPage() {
                       <p className="text-sm font-medium">{message.text}</p>
                       {message.type === "error" && (
                         <p className="mt-1 text-xs opacity-90">
-                          Tip: Add a UNIQUE constraint on <span className="font-semibold">batch_number</span> to prevent collisions.
+                          Tip: Kilograms must be ≥ number of bags (except 1kg = 1 bag)
                         </p>
                       )}
                     </div>
@@ -682,7 +745,7 @@ export default function NewCoffeeRecordPage() {
                 </Link>
                 <button
                   type="submit"
-                  disabled={submitting || loadingSuppliers || suppliers.length === 0 || batchLoading}
+                  disabled={submitting || loadingSuppliers || suppliers.length === 0 || batchLoading || !isValidRatio}
                   className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                 >
                   {submitting ? (
@@ -700,9 +763,11 @@ export default function NewCoffeeRecordPage() {
               </div>
 
               {/* Footer note */}
-              <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-slate-700 pt-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-slate-700 pt-4 space-y-1">
                 <p>📝 <span className="font-semibold">Batch number format:</span> YYYYMMDD001, 002, 003... (auto-generated)</p>
-                <p className="mt-1">⚠️ <span className="font-semibold">Tip:</span> For 1000kg with 10 bags = 100kg/bag. The system detects swapped values automatically.</p>
+                <p>⚠️ <span className="font-semibold">Validation rule:</span> Kilograms must be ≥ number of bags (except 1kg = 1 bag)</p>
+                <p>💡 <span className="font-semibold">Valid examples:</span> 100kg/2 bags ✅ | 50kg/1 bag ✅ | 1kg/1 bag ✅ | 500kg/5 bags ✅</p>
+                <p>❌ <span className="font-semibold">Invalid examples:</span> 10kg/20 bags ❌ | 5kg/10 bags ❌ | 2kg/3 bags ❌</p>
               </div>
             </form>
           </div>

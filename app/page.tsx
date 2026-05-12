@@ -27,7 +27,13 @@ import {
   Shield,
   CreditCard,
   FileText,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  Scale,
 } from "lucide-react";
+
+
 
 type TimeFilter = "daily" | "weekly" | "monthly";
 
@@ -67,20 +73,12 @@ type AlertMsg = { text: string; type: "success" | "error" } | null;
 const RATE_PER_KG = 150;
 
 function ymdCompact(dateYmd: string) {
-  // "2025-10-24" -> "20251024"
   return (dateYmd || "").replaceAll("-", "");
 }
 function pad3(n: number) {
   return String(n).padStart(3, "0");
 }
 
-/**
- * Daily-reset numeric batch number:
- * 20251024001, 20251024002, ...
- * Uses coffee_records.date (YYYY-MM-DD)
- * Requires batch_number stored as TEXT/VARCHAR.
- * Recommended: UNIQUE(batch_number) in DB.
- */
 async function generateDailyBatchNumber(dateYmd: string) {
   const ymd = ymdCompact(dateYmd);
   const { data, error } = await supabase
@@ -100,6 +98,37 @@ async function generateDailyBatchNumber(dateYmd: string) {
   }
   return `${ymd}${pad3(nextSeq)}`;
 }
+
+// Auto-correction function for swapped kgs and bags
+const fixKgsAndBags = (totalKgs: number, bags: number) => {
+  if (!totalKgs || !bags || totalKgs <= 0 || bags <= 0) {
+    return {
+      totalKgs,
+      bags,
+      corrected: false,
+      message: "",
+    };
+  }
+
+  const isValidRatio = totalKgs >= bags;
+  const isOneToOne = totalKgs === 1 && bags === 1;
+  
+  if (!isValidRatio && !isOneToOne) {
+    return {
+      totalKgs: bags,
+      bags: totalKgs,
+      corrected: true,
+      message: "KGs and bags were automatically corrected because kgs should be greater than or equal to bags.",
+    };
+  }
+
+  return {
+    totalKgs,
+    bags,
+    corrected: false,
+    message: "",
+  };
+};
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -285,7 +314,7 @@ export default function DashboardPage() {
   );
 
   /* ====================================================================== */
-  /* ============== 1) COFFEE RECORD FORM ================================= */
+  /* ============== 1) COFFEE RECORD FORM (UPDATED) ======================= */
   /* ====================================================================== */
   const CoffeeFormComponent = () => {
     const [coffeeType, setCoffeeType] = useState("");
@@ -304,6 +333,13 @@ export default function DashboardPage() {
     const [coffeeMsg, setCoffeeMsg] = useState<AlertMsg>(null);
 
     const [previewBatch, setPreviewBatch] = useState<string>("");
+    
+    // Validation state
+    const [isValidRatio, setIsValidRatio] = useState(true);
+    const [showSwapWarning, setShowSwapWarning] = useState(false);
+    const [suggestedKgs, setSuggestedKgs] = useState(0);
+    const [suggestedBags, setSuggestedBags] = useState(0);
+    const [kgPerBag, setKgPerBag] = useState<number | null>(null);
 
     const loadSuppliers = async () => {
       setLoadingSuppliers(true);
@@ -321,7 +357,6 @@ export default function DashboardPage() {
       loadSuppliers();
     }, []);
 
-    // Batch preview whenever date changes (nice UX)
     useEffect(() => {
       let cancelled = false;
       const run = async () => {
@@ -338,6 +373,39 @@ export default function DashboardPage() {
       };
     }, [coffeeDate]);
 
+    // Real-time validation for swapped values
+    useEffect(() => {
+      const kgs = Number(kilograms);
+      const bagsNum = Number(bags);
+      
+      if (kgs > 0 && bagsNum > 0) {
+        const kgPerBagValue = kgs / bagsNum;
+        setKgPerBag(kgPerBagValue);
+        
+        const validRatio = kgs >= bagsNum;
+        const isOneToOne = kgs === 1 && bagsNum === 1;
+        const valid = validRatio || isOneToOne;
+        
+        setIsValidRatio(valid);
+        
+        if (!valid) {
+          const fixed = fixKgsAndBags(kgs, bagsNum);
+          if (fixed.corrected) {
+            setShowSwapWarning(true);
+            setSuggestedKgs(fixed.totalKgs);
+            setSuggestedBags(fixed.bags);
+            return;
+          }
+        }
+        
+        setShowSwapWarning(false);
+      } else {
+        setShowSwapWarning(false);
+        setKgPerBag(null);
+        setIsValidRatio(true);
+      }
+    }, [kilograms, bags]);
+
     const filteredSuppliers = useMemo(() => {
       if (!supplierQuery.trim()) return suppliers.slice(0, 10);
       const term = supplierQuery.toLowerCase();
@@ -352,6 +420,12 @@ export default function DashboardPage() {
       setSupplierName(label);
       setSupplierQuery(`${label} – ${supplier.origin}`);
       setShowSupplierList(false);
+    };
+
+    const applySwapCorrection = () => {
+      setKilograms(String(suggestedKgs));
+      setBags(String(suggestedBags));
+      setShowSwapWarning(false);
     };
 
     const submitCoffeeRecord = async (e: FormEvent) => {
@@ -374,24 +448,54 @@ export default function DashboardPage() {
         setCoffeeSubmitting(false);
         return;
       }
-      if (!kilograms || Number(kilograms) <= 0) {
+
+      let kgNumber = Number(kilograms);
+      let bagsNumber = Number(bags);
+
+      if (isNaN(kgNumber) || kgNumber <= 0) {
         setCoffeeMsg({ text: "Kilograms must be greater than 0.", type: "error" });
         setCoffeeSubmitting(false);
         return;
       }
-      if (!bags || Number(bags) <= 0) {
+      if (isNaN(bagsNumber) || bagsNumber <= 0) {
         setCoffeeMsg({ text: "Bags must be greater than 0.", type: "error" });
         setCoffeeSubmitting(false);
         return;
       }
 
-      const kgNumber = Number(kilograms);
-      const bagsNumber = Number(bags);
+      // Validate: kgs should be >= bags (except 1:1)
+      const isValidRatioCheck = kgNumber >= bagsNumber;
+      const isOneToOne = kgNumber === 1 && bagsNumber === 1;
+
+      if (!isValidRatioCheck && !isOneToOne) {
+        setCoffeeMsg({ 
+          text: `Invalid: ${kgNumber} kgs cannot fit into ${bagsNumber} bags. Each bag would need to hold ${(kgNumber / bagsNumber).toFixed(1)} kg. Did you swap kgs and bags?`, 
+          type: "error" 
+        });
+        setCoffeeSubmitting(false);
+        return;
+      }
+
+      // Apply auto-correction for swapped values
+      const fixed = fixKgsAndBags(kgNumber, bagsNumber);
+      
+      if (fixed.corrected) {
+        const confirmSave = confirm(
+          `${fixed.message}\n\nOriginal values:\nKGs: ${kgNumber}\nBags: ${bagsNumber}\n\nCorrected values:\nKGs: ${fixed.totalKgs}\nBags: ${fixed.bags}\n\nContinue saving with corrected values?`
+        );
+        
+        if (!confirmSave) {
+          setCoffeeSubmitting(false);
+          return;
+        }
+        
+        kgNumber = fixed.totalKgs;
+        bagsNumber = fixed.bags;
+      }
 
       const supplier = suppliers.find((s) => s.id === selectedSupplierId);
       const supplierNameValue = supplierName || (supplier ? `${supplier.name} (${supplier.code})` : "Unknown Supplier");
 
-      // Generate numeric batch number: 20251024001 (no hyphens)
       let batch_number = "";
       try {
         batch_number = await generateDailyBatchNumber(coffeeDate);
@@ -401,7 +505,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // Insert with retry on duplicate batch_number (if UNIQUE constraint exists)
       const makePayload = () => ({
         id: crypto.randomUUID(),
         coffee_type: coffeeType.trim(),
@@ -411,7 +514,7 @@ export default function DashboardPage() {
         supplier_id: selectedSupplierId,
         supplier_name: supplierNameValue,
         status: "pending",
-        batch_number, // ✅ numeric daily-reset
+        batch_number,
         created_by: user?.email ?? null,
       });
 
@@ -421,7 +524,8 @@ export default function DashboardPage() {
         const { error } = await supabase.from("coffee_records").insert([payload]);
 
         if (!error) {
-          setCoffeeMsg({ text: `Coffee record saved. Batch: ${batch_number}`, type: "success" });
+          const correctionMsg = fixed.corrected ? `\n\nNote: Values were auto-corrected from ${kilograms}kg/${bags} bags.` : "";
+          setCoffeeMsg({ text: `Coffee record saved. Batch: ${batch_number}${correctionMsg}`, type: "success" });
           fetchDashboardStats();
           setTimeout(() => {
             setCoffeeType("");
@@ -438,7 +542,6 @@ export default function DashboardPage() {
         }
 
         lastErr = error;
-        // If batch unique collision happens, regenerate and retry
         const msg = String(error.message || "").toLowerCase();
         const code = String((error as any).code || "").toLowerCase();
 
@@ -574,7 +677,10 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label className={`block text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 ${textClass}`}>Kilograms *</label>
+                <label className={`block text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 ${textClass} flex items-center gap-2`}>
+                  <Scale className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  Kilograms *
+                </label>
                 <input
                   type="number"
                   min={0}
@@ -582,12 +688,19 @@ export default function DashboardPage() {
                   value={kilograms}
                   onChange={(e) => setKilograms(e.target.value)}
                   placeholder="e.g. 1200"
-                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border ${borderClass} ${cardBgClass} ${textClass} focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm`}
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border ${borderClass} ${cardBgClass} ${textClass} focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm ${
+                    !isValidRatio && kilograms && bags && !(Number(kilograms) === 1 && Number(bags) === 1)
+                      ? "border-red-500 dark:border-red-500"
+                      : ""
+                  }`}
                   required
                 />
               </div>
               <div>
-                <label className={`block text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 ${textClass}`}>Bags *</label>
+                <label className={`block text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 ${textClass} flex items-center gap-2`}>
+                  <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  Bags *
+                </label>
                 <input
                   type="number"
                   min={0}
@@ -595,13 +708,79 @@ export default function DashboardPage() {
                   value={bags}
                   onChange={(e) => setBags(e.target.value)}
                   placeholder="e.g. 20"
-                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border ${borderClass} ${cardBgClass} ${textClass} focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm`}
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border ${borderClass} ${cardBgClass} ${textClass} focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm ${
+                    !isValidRatio && kilograms && bags && !(Number(kilograms) === 1 && Number(bags) === 1)
+                      ? "border-red-500 dark:border-red-500"
+                      : ""
+                  }`}
                   required
                 />
               </div>
             </div>
           </div>
         </div>
+
+        {/* Real-time validation warnings */}
+        {kgPerBag !== null && (
+          <div className={`text-xs p-3 rounded-lg transition-colors ${
+            isValidRatio
+              ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
+              : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300"
+          }`}>
+            <div className="flex items-center gap-2">
+              {isValidRatio ? (
+                <CheckCircle className="w-4 h-4" />
+              ) : (
+                <XCircle className="w-4 h-4" />
+              )}
+              <span className="font-medium">
+                {kgPerBag.toFixed(1)} kg per bag
+              </span>
+            </div>
+            
+            {isValidRatio ? (
+              <div className="mt-1">
+                {Number(kilograms) === 1 && Number(bags) === 1 ? (
+                  <p>✓ Valid: Small sample delivery (1kg in 1 bag)</p>
+                ) : (
+                  <p>✓ Valid: {Number(kilograms)} kgs in {Number(bags)} bags</p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-1 space-y-1">
+                <p>❌ Invalid: {Number(kilograms)} kgs cannot fit into {Number(bags)} bags</p>
+                <p className="text-xs opacity-90">
+                  Rule: Kilograms must be ≥ number of bags (except 1kg = 1 bag)
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Swap warning */}
+        {showSwapWarning && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 transition-colors">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">
+                  ⚠️ Invalid values detected
+                </p>
+                <p className="text-sm text-yellow-700 dark:text-yellow-400 mb-3">
+                  {kilograms} kgs for {bags} bags is invalid because kgs should be ≥ bags.
+                  Did you swap kilograms and bags?
+                </p>
+                <button
+                  type="button"
+                  onClick={applySwapCorrection}
+                  className="text-sm bg-yellow-100 dark:bg-yellow-900/50 hover:bg-yellow-200 dark:hover:bg-yellow-900 text-yellow-800 dark:text-yellow-300 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Use suggested values: {suggestedKgs} kgs, {suggestedBags} bags
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {coffeeMsg && (
           <div
@@ -629,12 +808,19 @@ export default function DashboardPage() {
           </Link>
           <button
             type="submit"
-            disabled={coffeeSubmitting || loadingSuppliers || suppliers.length === 0}
+            disabled={coffeeSubmitting || loadingSuppliers || suppliers.length === 0 || !isValidRatio}
             className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-medium disabled:opacity-50 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] w-full xs:w-auto order-1 xs:order-2"
           >
             {coffeeSubmitting ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Save className="w-4 h-4 sm:w-5 sm:h-5" />}
             <span className="text-sm sm:text-base">{coffeeSubmitting ? "Saving..." : "Save Coffee Record"}</span>
           </button>
+        </div>
+
+        {/* Footer note */}
+        <div className={`text-[10px] sm:text-xs ${textMutedClass} border-t ${borderClass} pt-4 space-y-1`}>
+          <p>📝 <span className="font-semibold">Validation rule:</span> Kilograms must be ≥ number of bags (except 1kg = 1 bag)</p>
+          <p>💡 <span className="font-semibold">Valid examples:</span> 100kg/2 bags ✅ | 50kg/1 bag ✅ | 1kg/1 bag ✅ | 500kg/5 bags ✅</p>
+          <p>❌ <span className="font-semibold">Invalid examples:</span> 10kg/20 bags ❌ | 5kg/10 bags ❌ | 2kg/3 bags ❌</p>
         </div>
       </form>
     );
